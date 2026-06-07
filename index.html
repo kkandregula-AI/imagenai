@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ImagiNAI — AI Image Studio</title>
+<meta name="theme-color" content="#0a0a0f">
+<link rel="manifest" href="#" id="manifest-link">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0f;--bg2:#10101a;--bg3:#16162a;
+  --surface:#1a1a2e;--surface2:#1f1f38;
+  --border:rgba(138,99,255,0.15);--bh:rgba(138,99,255,0.4);
+  --accent:#8a63ff;--a2:#c084fc;--gold:#f5c842;
+  --text:#e8e6f0;--t2:#9490b0;--t3:#5a5878;
+  --green:#4ade80;--red:#f87171;--cyan:#67e8f9;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 80% 60% at 10% 20%,rgba(138,99,255,0.06),transparent 60%),
+             radial-gradient(ellipse 60% 50% at 90% 80%,rgba(192,132,252,0.05),transparent 60%);}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:100;background:rgba(10,10,15,0.95);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);padding:0 16px;height:56px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.logo{font-family:'Cinzel',serif;font-size:1.2rem;font-weight:700;white-space:nowrap;
+  background:linear-gradient(135deg,#8a63ff,#c084fc,#f5c842);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.logo-sub{font-size:0.75rem;color:var(--t2);-webkit-text-fill-color:var(--t2);
+  font-family:'DM Sans',sans-serif;font-weight:400;margin-left:6px;}
+.hdr-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.demo-pill{background:rgba(245,200,66,0.12);border:1px solid rgba(245,200,66,0.3);
+  color:var(--gold);padding:5px 10px;border-radius:20px;font-size:0.7rem;
+  font-family:'DM Mono',monospace;letter-spacing:0.06em;display:none;align-items:center;gap:4px;}
+.demo-pill.on{display:flex;}
+.key-btn{background:var(--surface);border:1px solid var(--border);color:var(--t2);
+  padding:6px 12px;border-radius:8px;font-size:0.75rem;cursor:pointer;
+  font-family:'DM Mono',monospace;transition:all 0.2s;display:flex;align-items:center;gap:5px;}
+.key-btn:hover{border-color:var(--accent);color:var(--accent);}
+.kdot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;}
+.kdot.on{background:var(--green);box-shadow:0 0 5px var(--green);}
+
+/* DEMO BANNER */
+.demo-banner{background:linear-gradient(135deg,rgba(245,200,66,0.07),rgba(138,99,255,0.07));
+  border-bottom:1px solid rgba(245,200,66,0.18);padding:8px 16px;
+  display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.demo-banner.on{display:flex;}
+.db-text{font-size:0.76rem;color:var(--gold);}
+.db-btns{display:flex;gap:7px;flex-shrink:0;}
+.btn-run{background:rgba(245,200,66,0.14);border:1px solid rgba(245,200,66,0.3);
+  color:var(--gold);padding:5px 12px;border-radius:6px;font-size:0.73rem;cursor:pointer;
+  font-family:'DM Mono',monospace;}
+.btn-exit{background:none;border:1px solid var(--border);color:var(--t3);
+  padding:5px 10px;border-radius:6px;font-size:0.73rem;cursor:pointer;}
+
+/* MAIN */
+.wrap{max-width:1320px;margin:0 auto;padding:20px 16px;position:relative;z-index:1;}
+
+/* Two-column on desktop, single on mobile */
+.layout{display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start;}
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr;}
+  .sidebar{position:static!important;max-height:none!important;overflow-y:visible!important;order:2;}
+  .gallery-col{order:1;}
+}
+
+/* SIDEBAR */
+.sidebar{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px;position:sticky;top:66px;max-height:calc(100vh - 80px);overflow-y:auto;}
+.sidebar::-webkit-scrollbar{width:3px;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:2px;}
+
+.sec-title{font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.14em;
+  color:var(--accent);text-transform:uppercase;margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+label{display:block;font-size:0.75rem;color:var(--t2);margin-bottom:6px;font-weight:500;}
+
+/* Mode tabs */
+.tabs{display:flex;gap:3px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:9px;padding:3px;margin-bottom:16px;}
+.tab{flex:1;background:none;border:none;color:var(--t3);padding:7px 4px;
+  border-radius:7px;font-size:0.73rem;cursor:pointer;transition:all 0.2s;
+  font-family:'DM Sans',sans-serif;font-weight:500;}
+.tab.on{background:var(--surface2);color:var(--text);}
+
+/* Prompt area */
+.prompt-box{position:relative;margin-bottom:14px;}
+textarea{width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;
+  font-size:0.85rem;line-height:1.55;padding:11px 11px 36px;
+  resize:vertical;min-height:85px;outline:none;transition:border-color 0.2s;}
+textarea:focus{border-color:var(--accent);}
+textarea::placeholder{color:var(--t3);}
+.enh-btn{position:absolute;bottom:8px;right:8px;
+  background:linear-gradient(135deg,rgba(138,99,255,0.2),rgba(192,132,252,0.2));
+  border:1px solid rgba(138,99,255,0.28);color:var(--a2);
+  padding:4px 10px;border-radius:5px;font-size:0.68rem;cursor:pointer;
+  font-family:'DM Mono',monospace;transition:all 0.2s;}
+.enh-btn:hover{border-color:var(--accent);}
+.enh-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* Enhanced box */
+.enh-box{display:none;background:rgba(138,99,255,0.05);border:1px solid rgba(138,99,255,0.2);
+  border-radius:7px;padding:9px 11px;margin-bottom:12px;
+  font-size:0.78rem;color:var(--a2);line-height:1.5;}
+.enh-box.on{display:block;}
+.enh-lbl{font-size:0.62rem;font-family:'DM Mono',monospace;letter-spacing:0.1em;
+  color:var(--accent);margin-bottom:3px;}
+
+/* Cache bar */
+.cache-bar{display:none;background:rgba(74,222,128,0.04);border:1px solid rgba(74,222,128,0.14);
+  border-radius:7px;padding:8px 11px;margin-bottom:12px;}
+.cache-bar.on{display:block;}
+.cr{display:flex;justify-content:space-between;margin-bottom:2px;}
+.cl{font-size:0.65rem;font-family:'DM Mono',monospace;color:var(--t3);}
+.cv{font-size:0.72rem;font-family:'DM Mono',monospace;color:var(--green);font-weight:500;}
+.cprog{height:3px;background:var(--bg3);border-radius:2px;margin-top:5px;overflow:hidden;}
+.cfill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:2px;transition:width 0.5s;}
+
+/* Style chips */
+.style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px;}
+.sc{background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  padding:7px 4px;text-align:center;cursor:pointer;transition:all 0.2s;
+  font-size:0.69rem;color:var(--t2);display:flex;flex-direction:column;align-items:center;gap:3px;}
+.sc .ico{font-size:1rem;}
+.sc:hover{border-color:var(--bh);color:var(--text);}
+.sc.on{border-color:var(--accent);background:rgba(138,99,255,0.11);color:var(--a2);}
+
+/* Ratio */
+.ratio-row{display:flex;gap:6px;margin-bottom:14px;}
+.rb{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  padding:7px 4px;text-align:center;cursor:pointer;font-size:0.7rem;color:var(--t2);
+  transition:all 0.2s;font-family:'DM Mono',monospace;}
+.rb:hover{border-color:var(--bh);color:var(--text);}
+.rb.on{border-color:var(--gold);background:rgba(245,200,66,0.07);color:var(--gold);}
+
+/* Neg prompt */
+.neg{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.8rem;
+  padding:8px 10px;outline:none;transition:border-color 0.2s;margin-bottom:14px;}
+.neg::placeholder{color:var(--t3);}
+.neg:focus{border-color:rgba(248,113,113,0.4);}
+
+/* Generate btn */
+.gen-btn{width:100%;background:linear-gradient(135deg,#8a63ff,#c084fc);border:none;
+  border-radius:11px;color:white;font-family:'Cinzel',serif;font-size:0.88rem;
+  font-weight:600;letter-spacing:0.08em;padding:14px;cursor:pointer;
+  transition:all 0.3s;position:relative;overflow:hidden;margin-bottom:8px;}
+.gen-btn::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,0.1),transparent);
+  opacity:0;transition:opacity 0.2s;}
+.gen-btn:hover::before{opacity:1;}
+.gen-btn:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(138,99,255,0.38);}
+.gen-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none;}
+
+/* Cancel btn */
+.can-btn{width:100%;background:none;border:1px solid rgba(248,113,113,0.28);
+  border-radius:9px;color:var(--red);font-size:0.8rem;padding:9px;
+  cursor:pointer;transition:all 0.2s;display:none;margin-bottom:8px;}
+.can-btn.on{display:block;}
+.can-btn:hover{background:rgba(248,113,113,0.07);}
+
+/* Token stats */
+.tok-grid{background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  padding:9px 11px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.tv{font-family:'DM Mono',monospace;font-size:0.82rem;color:var(--a2);font-weight:500;text-align:center;}
+.tl{font-size:0.6rem;color:var(--t3);letter-spacing:0.05em;text-align:center;margin-top:1px;}
+
+/* History */
+.hist-list{max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;margin-top:4px;}
+.hist-list::-webkit-scrollbar{width:3px;}
+.hi{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  padding:7px 9px;cursor:pointer;transition:all 0.2s;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:6px;}
+.hi:hover{border-color:var(--bh);}
+.ht{font-size:0.73rem;color:var(--t2);line-height:1.4;flex:1;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.hd{background:none;border:none;color:var(--t3);cursor:pointer;font-size:0.75rem;padding:0 2px;flex-shrink:0;}
+.hd:hover{color:var(--red);}
+.no-hist{font-size:0.73rem;color:var(--t3);text-align:center;padding:10px 0;}
+
+/* GALLERY COLUMN */
+.gallery-col{}
+.gal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.gal-title{font-family:'Cinzel',serif;font-size:1rem;color:var(--text);}
+.clr-btn{background:none;border:1px solid var(--border);color:var(--t3);
+  padding:5px 11px;border-radius:6px;font-size:0.72rem;cursor:pointer;transition:all 0.2s;}
+.clr-btn:hover{border-color:var(--red);color:var(--red);}
+
+/* Progress box */
+.prog-box{display:none;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:28px;text-align:center;margin-bottom:16px;}
+.prog-box.on{display:block;}
+.spinner{width:48px;height:48px;border:2px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.prog-title{font-family:'Cinzel',serif;font-size:0.85rem;color:var(--t2);margin-bottom:4px;}
+.prog-msg{font-size:0.72rem;color:var(--t3);margin-bottom:12px;}
+.steps{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;}
+.step{font-size:0.68rem;font-family:'DM Mono',monospace;padding:3px 9px;
+  border-radius:20px;background:var(--bg3);color:var(--t3);border:1px solid var(--border);transition:all 0.3s;}
+.step.act{background:rgba(138,99,255,0.14);color:var(--a2);border-color:var(--accent);}
+.step.done{background:rgba(74,222,128,0.09);color:var(--green);border-color:rgba(74,222,128,0.28);}
+.step.fail{background:rgba(248,113,113,0.09);color:var(--red);border-color:rgba(248,113,113,0.28);}
+
+/* Batch slots */
+.batch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;}
+.bslot{background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:5px;font-size:0.68rem;color:var(--t3);overflow:hidden;position:relative;}
+.bslot img{width:100%;height:100%;object-fit:cover;display:none;}
+.bslot.done img{display:block;}
+.bslot.done .bs-lbl{display:none;}
+.bslot.ld .bs-ico{animation:pulse 1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:0.4;}50%{opacity:1;}}
+
+/* Image grid */
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+.icard{background:var(--surface);border:1px solid var(--border);border-radius:11px;
+  overflow:hidden;transition:all 0.3s;animation:fadeUp 0.4s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.icard:hover{border-color:var(--bh);transform:translateY(-2px);box-shadow:0 0 32px rgba(138,99,255,0.18);}
+.iwrap{position:relative;background:var(--bg3);overflow:hidden;}
+.iwrap img{width:100%;height:auto;display:block;min-height:180px;}
+.ioverlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,10,15,0.88),transparent 50%);
+  opacity:0;transition:opacity 0.3s;display:flex;align-items:flex-end;padding:9px;gap:5px;}
+.icard:hover .ioverlay{opacity:1;}
+.obtn{background:rgba(255,255,255,0.08);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.12);color:white;padding:5px 9px;
+  border-radius:5px;font-size:0.66rem;cursor:pointer;transition:all 0.2s;}
+.obtn:hover{background:rgba(138,99,255,0.28);border-color:var(--accent);}
+.imeta{padding:10px;}
+.iprompt{font-size:0.74rem;color:var(--t2);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.ibadges{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
+.badge{font-size:0.6rem;font-family:'DM Mono',monospace;padding:2px 6px;
+  border-radius:20px;background:rgba(138,99,255,0.09);color:var(--a2);
+  border:1px solid rgba(138,99,255,0.18);}
+.badge.demo{background:rgba(245,200,66,0.09);color:var(--gold);border-color:rgba(245,200,66,0.18);}
+.badge.var{background:rgba(103,232,249,0.09);color:var(--cyan);border-color:rgba(103,232,249,0.18);}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:14px 12px;
+  text-align:center;cursor:pointer;transition:all 0.25s;margin-bottom:14px;
+  background:var(--bg3);position:relative;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(138,99,255,0.07);}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.uz-ico{font-size:1.6rem;margin-bottom:5px;}
+.uz-txt{font-size:0.76rem;color:var(--t2);line-height:1.5;}
+.uz-sub{font-size:0.68rem;color:var(--t3);margin-top:2px;}
+.preview-wrap{position:relative;margin-bottom:14px;border-radius:9px;overflow:hidden;
+  border:1px solid var(--border);background:var(--bg3);}
+.preview-wrap img{width:100%;max-height:180px;object-fit:cover;display:block;}
+.preview-actions{display:flex;gap:6px;padding:8px;}
+.pv-btn{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+  color:var(--t2);font-size:0.72rem;padding:6px 8px;cursor:pointer;transition:all 0.2s;text-align:center;}
+.pv-btn:hover{border-color:var(--accent);color:var(--a2);}
+.pv-btn.active{background:rgba(138,99,255,0.12);border-color:var(--accent);color:var(--a2);}
+.mode-source-tabs{display:flex;gap:3px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;padding:3px;margin-bottom:14px;}
+.mst{flex:1;background:none;border:none;color:var(--t3);padding:7px 4px;border-radius:6px;
+  font-size:0.72rem;cursor:pointer;transition:all 0.2s;font-family:'DM Sans',sans-serif;font-weight:500;}
+.mst.on{background:linear-gradient(135deg,rgba(138,99,255,0.25),rgba(192,132,252,0.25));color:var(--a2);}
+.img2img-badge{display:inline-block;background:rgba(103,232,249,0.1);color:var(--cyan);
+  border:1px solid rgba(103,232,249,0.2);border-radius:20px;font-size:0.62rem;
+  font-family:'DM Mono',monospace;padding:2px 7px;margin-left:6px;vertical-align:middle;}
+
+/* Empty state */
+.empty{grid-column:1/-1;text-align:center;padding:60px 20px;}
+.empty-ico{font-size:3rem;margin-bottom:12px;opacity:0.28;}
+.empty-title{font-family:'Cinzel',serif;font-size:0.95rem;color:var(--t2);margin-bottom:5px;}
+.empty-sub{font-size:0.8rem;color:var(--t3);}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);
+  backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center;}
+.modal-bg.on{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:26px;max-width:400px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+.modal h3{font-family:'Cinzel',serif;font-size:1rem;margin-bottom:6px;}
+.modal-hint{background:rgba(245,200,66,0.06);border:1px solid rgba(245,200,66,0.18);
+  border-radius:6px;padding:9px 11px;margin-bottom:12px;font-size:0.74rem;color:var(--gold);line-height:1.5;}
+.modal-sub{font-size:0.78rem;color:var(--t2);margin-bottom:14px;line-height:1.5;}
+.modal input{width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:7px;color:var(--text);font-family:'DM Mono',monospace;
+  font-size:0.8rem;padding:10px;outline:none;margin-bottom:12px;transition:border-color 0.2s;}
+.modal input:focus{border-color:var(--accent);}
+.modal-btns{display:flex;gap:8px;}
+.btn-save{flex:1;background:linear-gradient(135deg,#8a63ff,#c084fc);border:none;
+  border-radius:7px;color:white;font-weight:600;padding:10px;cursor:pointer;font-size:0.82rem;}
+.btn-skip{background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  color:var(--t2);padding:10px 13px;cursor:pointer;font-size:0.82rem;transition:all 0.2s;}
+.btn-skip:hover{border-color:var(--bh);color:var(--text);}
+
+/* Lightbox */
+.lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.96);
+  z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+.lb.on{display:flex;}
+.lb img{max-width:92vw;max-height:80vh;border-radius:10px;object-fit:contain;}
+.lb-close{position:absolute;top:16px;right:20px;background:none;
+  border:1px solid var(--border);color:var(--t2);width:32px;height:32px;
+  border-radius:7px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;}
+.lb-close:hover{border-color:var(--red);color:var(--red);}
+.lb-prompt{max-width:540px;text-align:center;font-size:0.8rem;color:var(--t2);
+  line-height:1.5;padding:0 16px;}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:8px 16px;border-radius:8px;font-size:0.78rem;z-index:500;
+  opacity:0;transition:all 0.3s;pointer-events:none;white-space:nowrap;max-width:90vw;}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Footer */
+footer{margin-top:40px;border-top:1px solid var(--border);padding:16px;
+  text-align:center;position:relative;z-index:1;}
+.ftoks{display:flex;justify-content:center;gap:16px;margin-bottom:7px;flex-wrap:wrap;}
+.fi{font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--t3);display:flex;align-items:center;gap:4px;}
+.fi span{color:var(--a2);}
+.fi .sv{color:var(--green);}
+.fcredit{font-size:0.68rem;color:var(--t3);font-family:'DM Mono',monospace;letter-spacing:0.04em;}
+
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="logo">ImagiNAI</span><span class="logo-sub">AI Image Studio</span>
+  </div>
+  <div class="hdr-right">
+    <div class="demo-pill" id="demoPill">✦ DEMO</div>
+    <button class="key-btn" onclick="openModal()">
+      <span class="kdot" id="kdot"></span>API Key
+    </button>
+  </div>
+</header>
+
+<div class="demo-banner" id="demoBanner">
+  <div class="db-text">✦ Demo Mode — No API key needed. Images via Pollinations.ai (free).</div>
+  <div class="db-btns">
+    <button class="btn-run" onclick="runDemo()">▶ New Demo</button>
+    <button class="btn-exit" onclick="exitDemo()">Exit</button>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sec-title">✦ Prompt Studio</div>
+
+      <!-- Mode tabs -->
+      <div class="tabs">
+        <button class="tab on" id="tSingle" onclick="setMode('single')">Single</button>
+        <button class="tab" id="tBatch"  onclick="setMode('batch')">Batch ×4</button>
+        <button class="tab" id="tVar"    onclick="setMode('var')">Variations</button>
+      </div>
+
+      <label>Describe your image</label>
+      <div class="prompt-box">
+        <textarea id="promptInput" rows="4" placeholder="A lone lighthouse on a rocky cliff at twilight..."></textarea>
+        <button class="enh-btn" id="enhBtn" onclick="enhancePrompt()">✦ AI Enhance</button>
+      </div>
+
+      <div class="enh-box" id="enhBox">
+        <div class="enh-lbl">✦ ENHANCED PROMPT</div>
+        <div id="enhText"></div>
+      </div>
+
+      <div class="cache-bar" id="cacheBar">
+        <div class="cr"><span class="cl">CACHE HIT RATE</span><span class="cv" id="cHit">0%</span></div>
+        <div class="cr"><span class="cl">TOKENS SAVED</span><span class="cv" id="cSaved">0</span></div>
+        <div class="cprog"><div class="cfill" id="cFill" style="width:0%"></div></div>
+      </div>
+
+      <!-- Source mode: Text prompt vs Image upload -->
+      <div class="mode-source-tabs">
+        <button class="mst on" id="msText" onclick="setSource('text')">✏️ Text Prompt</button>
+        <button class="mst" id="msImg" onclick="setSource('img')">🖼️ Upload Image</button>
+      </div>
+
+      <!-- Upload zone (shown in image mode) -->
+      <div id="uploadSection" style="display:none;">
+        <div class="upload-zone" id="uploadZone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+          <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+          <div class="uz-ico">📁</div>
+          <div class="uz-txt">Drop image here or <strong style="color:var(--a2)">click to browse</strong></div>
+          <div class="uz-sub">JPG, PNG, WEBP · Max 10MB</div>
+        </div>
+        <div class="preview-wrap" id="previewWrap" style="display:none;">
+          <img id="uploadPreview" src="" alt="Uploaded image">
+          <div class="preview-actions">
+            <div class="pv-btn active" id="pvStyle" onclick="setImgMode('style')">🎨 Style Transfer</div>
+            <div class="pv-btn" id="pvVariant" onclick="setImgMode('variant')">🔀 Variation</div>
+            <div class="pv-btn" id="pvAnalyze" onclick="setImgMode('analyze')">🔍 AI Analyze</div>
+            <div class="pv-btn" id="pvClear" onclick="clearUpload()" style="flex:0;padding:6px 10px;">✕</div>
+          </div>
+        </div>
+      </div>
+
+      <label>Art Style</label>
+      <div class="style-grid">
+        <div class="sc on" data-s="photorealistic"           onclick="setStyle(this)"><span class="ico">📷</span>Photo Real</div>
+        <div class="sc"    data-s="digital art, artstation"  onclick="setStyle(this)"><span class="ico">🎨</span>Digital Art</div>
+        <div class="sc"    data-s="anime, manga style"       onclick="setStyle(this)"><span class="ico">⛩️</span>Anime</div>
+        <div class="sc"    data-s="oil painting"             onclick="setStyle(this)"><span class="ico">🖼️</span>Oil Paint</div>
+        <div class="sc"    data-s="watercolor painting"      onclick="setStyle(this)"><span class="ico">💧</span>Watercolor</div>
+        <div class="sc"    data-s="cyberpunk, neon lights"   onclick="setStyle(this)"><span class="ico">🌆</span>Cyberpunk</div>
+        <div class="sc"    data-s="fantasy art, magical"     onclick="setStyle(this)"><span class="ico">🧙</span>Fantasy</div>
+        <div class="sc"    data-s="3D render, octane render" onclick="setStyle(this)"><span class="ico">🧊</span>3D Render</div>
+        <div class="sc"    data-s="pencil sketch"            onclick="setStyle(this)"><span class="ico">✏️</span>Sketch</div>
+      </div>
+
+      <label>Aspect Ratio</label>
+      <div class="ratio-row">
+        <div class="rb on" data-w="1024" data-h="1024" onclick="setRatio(this)">1:1</div>
+        <div class="rb"    data-w="1280" data-h="720"  onclick="setRatio(this)">16:9</div>
+        <div class="rb"    data-w="720"  data-h="1280" onclick="setRatio(this)">9:16</div>
+        <div class="rb"    data-w="1024" data-h="768"  onclick="setRatio(this)">4:3</div>
+      </div>
+
+      <label>Negative Prompt <span style="color:var(--t3)">(avoid)</span></label>
+      <input class="neg" id="negInput" type="text" placeholder="blurry, ugly, deformed, watermark...">
+
+      <button class="gen-btn" id="genBtn" onclick="generate()">✦ GENERATE IMAGE</button>
+      <button class="can-btn" id="canBtn" onclick="cancelGen()">✕ Cancel</button>
+
+      <div class="tok-grid">
+        <div><div class="tv" id="sIn">0</div><div class="tl">INPUT TOK</div></div>
+        <div><div class="tv" id="sOut">0</div><div class="tl">OUTPUT TOK</div></div>
+        <div><div class="tv" id="sCalls">0</div><div class="tl">API CALLS</div></div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="sec-title">✦ Prompt History</div>
+        <div class="hist-list" id="histList"></div>
+      </div>
+    </div>
+
+    <!-- GALLERY -->
+    <div class="gallery-col" id="galleryCol">
+      <div class="gal-hdr">
+        <div class="gal-title">Generated Gallery</div>
+        <button class="clr-btn" onclick="clearGallery()">Clear All</button>
+      </div>
+
+      <div class="prog-box" id="progBox">
+        <div class="spinner"></div>
+        <div class="prog-title" id="progTitle">Generating...</div>
+        <div class="prog-msg"  id="progMsg">Preparing</div>
+        <div class="steps">
+          <div class="step" id="s1">Enhancing</div>
+          <div class="step" id="s2">Composing</div>
+          <div class="step" id="s3">Rendering</div>
+          <div class="step" id="s4">Saving</div>
+        </div>
+        <div class="batch-grid" id="batchGrid" style="display:none;"></div>
+      </div>
+
+      <div class="img-grid" id="imgGrid"></div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="ftoks">
+    <div class="fi">Input: <span id="fIn">0</span></div>
+    <div class="fi">Output: <span id="fOut">0</span></div>
+    <div class="fi">Calls: <span id="fCalls">0</span></div>
+    <div class="fi">Images: <span id="fImgs">0</span></div>
+    <div class="fi">Cache saved: <span class="sv" id="fSaved">0 tok</span></div>
+    <div class="fi">Est. saving: <span class="sv" id="fUsd">$0.000</span></div>
+  </div>
+  <div class="fcredit">Designed & Architected by Krishnamurthy Kandregula · Made by Claude</div>
+</footer>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>🔑 API Configuration</h3>
+    <div class="modal-hint">💡 No key? Click <strong>Try Demo</strong> to explore with a sample image. Image generation via Pollinations.ai is always free!</div>
+    <div class="modal-sub">Enter your Anthropic API key to enable AI prompt enhancement and token caching.</div>
+    <input id="apiInput" type="password" placeholder="sk-ant-...">
+    <div class="modal-btns">
+      <button class="btn-save" onclick="saveKey()">Save Key</button>
+      <button class="btn-skip" onclick="startDemo()">Try Demo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lb" id="lb" onclick="closeLbClick(event)">
+  <button class="lb-close" onclick="closeLb()">✕</button>
+  <img id="lbImg" src="" alt="">
+  <div class="lb-prompt" id="lbPrompt"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// - Constants -
+const MODEL = 'claude-sonnet-4-20250514';
+const MAX_ENH_TOKENS = 280;
+const WAIT_PER_IMAGE_MS = 4500; // simulated render wait (Pollinations is async)
+const MAX_WAIT_MS = 30000;
+const CACHE_USD_PER_TOK = 0.000003;
+
+const SYS_PROMPT = `You are an expert AI image prompt engineer.
+Transform a basic idea into a vivid, detailed image generation prompt.
+Include: lighting, mood, camera angle, artistic details, color palette, quality boosters.
+Keep under 180 words. Return ONLY the enhanced prompt — no preamble, no labels.`;
+
+const DEMO_PROMPTS = [
+  { raw: 'A lone lighthouse on a rocky cliff at twilight, crashing waves, dramatic storm clouds, cinematic golden light', style: 'photorealistic' },
+  { raw: 'A cyberpunk street market at night, neon signs, rain reflections', style: 'cyberpunk, neon lights' },
+  { raw: 'A magical forest with glowing mushrooms and fairy lights', style: 'fantasy art, magical' },
+  { raw: 'Ancient Japanese temple in autumn, falling maple leaves', style: 'watercolor painting' }
+];
+
+// - State -
+let apiKey = '';
+let selStyle = 'photorealistic';
+let selW = 1024, selH = 1024;
+let totalIn = 0, totalOut = 0, totalCalls = 0, totalImgs = 0;
+let cacheSaved = 0, cacheHits = 0, cacheCalls = 0;
+let gallery = [];
+let history = [];
+let running = false;
+let cancelled = false;
+let demoMode = false;
+let mode = 'single';
+let enhanced = '';
+let abortCtrl = null;
+
+// - Upload / Image-to-Image state -
+let uploadedDataUrl = null;   // base64 data URL of uploaded image
+let imgMode = 'style';        // 'style' | 'variant' | 'analyze'
+let sourceMode = 'text';      // 'text' | 'img'
+
+function setSource(mode) {
+  sourceMode = mode;
+  document.getElementById('msText').classList.toggle('on', mode === 'text');
+  document.getElementById('msImg').classList.toggle('on', mode === 'img');
+  document.getElementById('uploadSection').style.display = mode === 'img' ? 'block' : 'none';
+  const pbox = document.getElementById('promptBox');
+  if (pbox) pbox.style.display = mode === 'img' && uploadedDataUrl ? 'block' : (mode === 'text' ? 'block' : 'block');
+  // Update generate button label
+  updGenLabel();
+}
+
+function updGenLabel() {
+  const labels = {
+    single: sourceMode === 'img' && uploadedDataUrl
+      ? (imgMode === 'analyze' ? '✦ ANALYZE IMAGE' : imgMode === 'variant' ? '✦ CREATE VARIATION' : '✦ APPLY STYLE')
+      : '✦ GENERATE IMAGE',
+    batch: '✦ BATCH × 4 IMAGES',
+    var:   '✦ GENERATE VARIATIONS'
+  };
+  document.getElementById('genBtn').textContent = labels[mode] || '✦ GENERATE IMAGE';
+}
+
+function setImgMode(m) {
+  imgMode = m;
+  ['pvStyle','pvVariant','pvAnalyze'].forEach(id => document.getElementById(id).classList.remove('active'));
+  const map = { style:'pvStyle', variant:'pvVariant', analyze:'pvAnalyze' };
+  document.getElementById(map[m]).classList.add('active');
+  updGenLabel();
+  // Show/hide prompt depending on mode
+  const promptLabel = document.querySelector('label[for="promptLabel"]');
+  const promptBox = document.getElementById('promptInput');
+  if (m === 'analyze') {
+    promptBox.placeholder = 'What do you want to know about this image? (optional)';
+  } else if (m === 'style') {
+    promptBox.placeholder = 'Optional: add a scene description to blend with the style...';
+  } else {
+    promptBox.placeholder = 'Optional: describe a variation direction...';
+  }
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) loadImageFile(file);
+}
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
+  const file = event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImageFile(file);
+  else toast('Please drop an image file');
+}
+function loadImageFile(file) {
+  if (file.size > 10 * 1024 * 1024) { toast('Image too large — max 10MB'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedDataUrl = e.target.result;
+    document.getElementById('uploadPreview').src = uploadedDataUrl;
+    document.getElementById('previewWrap').style.display = 'block';
+    document.getElementById('uploadZone').style.display = 'none';
+    updGenLabel();
+    toast('✓ Image loaded — choose a mode below it');
+  };
+  reader.readAsDataURL(file);
+}
+function clearUpload() {
+  uploadedDataUrl = null;
+  document.getElementById('uploadPreview').src = '';
+  document.getElementById('previewWrap').style.display = 'none';
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('fileInput').value = '';
+  updGenLabel();
+  toast('Image cleared');
+}
+
+// - Image-to-image processing (canvas-based, free, no API needed) -
+function applyStyleTransfer(sourceDataUrl, styleName, seed) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      const maxS = 512;
+      const scale = Math.min(maxS / img.width, maxS / img.height, 1);
+      const W = c.width  = Math.round(img.width  * scale);
+      const H = c.height = Math.round(img.height * scale);
+      const ctx = c.getContext('2d');
+      const rng = mulberry32(seed || 42);
+      const r = () => rng();
+
+      // Draw original
+      ctx.drawImage(img, 0, 0, W, H);
+      const origData = ctx.getImageData(0, 0, W, H);
+
+      // Style-specific filter layers
+      if (styleName.includes('oil painting')) {
+        applyOilEffect(ctx, origData, W, H);
+      } else if (styleName.includes('watercolor')) {
+        applyWatercolorEffect(ctx, origData, W, H, r);
+      } else if (styleName.includes('pencil sketch')) {
+        applySketchEffect(ctx, origData, W, H);
+      } else if (styleName.includes('anime') || styleName.includes('manga')) {
+        applyAnimeEffect(ctx, origData, W, H);
+      } else if (styleName.includes('cyberpunk') || styleName.includes('neon')) {
+        applyCyberpunkEffect(ctx, origData, W, H, r);
+      } else if (styleName.includes('fantasy') || styleName.includes('magical')) {
+        applyFantasyEffect(ctx, origData, W, H, r);
+      } else {
+        // Photorealistic: cinematic grade
+        applyFilmEffect(ctx, origData, W, H, r);
+      }
+
+      drawLabel(ctx, W, H, 'Style Transfer: ' + styleName.split(',')[0], styleName);
+      resolve(c.toDataURL('image/jpeg', 0.93));
+    };
+    img.onerror = () => resolve(null);
+    img.src = sourceDataUrl;
+  });
+}
+
+// =============================================================================
+// STYLE TRANSFER ENGINE — Best-effort pure-canvas art style effects
+// Each uses pixel-level algorithms for the most convincing result possible
+// =============================================================================
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+// Box blur on raw pixel array, radius r, returns new Uint8ClampedArray
+function boxBlur(data, W, H, radius) {
+  const out = new Uint8ClampedArray(data.length);
+  const size = 2*radius+1, area = size*size;
+  for (let y=0;y<H;y++) {
+    for (let x=0;x<W;x++) {
+      let sr=0,sg=0,sb=0,cnt=0;
+      for (let dy=-radius;dy<=radius;dy++) {
+        const ny=Math.min(H-1,Math.max(0,y+dy));
+        for (let dx=-radius;dx<=radius;dx++) {
+          const nx=Math.min(W-1,Math.max(0,x+dx));
+          const i=(ny*W+nx)*4;
+          sr+=data[i];sg+=data[i+1];sb+=data[i+2];cnt++;
+        }
+      }
+      const o=(y*W+x)*4;
+      out[o]=sr/cnt;out[o+1]=sg/cnt;out[o+2]=sb/cnt;out[o+3]=255;
+    }
+  }
+  return out;
+}
+
+// Sobel edge magnitude map, returns Float32Array [0..1]
+function sobelMag(grey, W, H) {
+  const mag = new Float32Array(W*H);
+  let maxM=0;
+  for (let y=1;y<H-1;y++) {
+    for (let x=1;x<W-1;x++) {
+      const tl=grey[(y-1)*W+(x-1)],tc=grey[(y-1)*W+x],tr=grey[(y-1)*W+(x+1)];
+      const ml=grey[y*W+(x-1)],                        mr=grey[y*W+(x+1)];
+      const bl=grey[(y+1)*W+(x-1)],bc=grey[(y+1)*W+x],br=grey[(y+1)*W+(x+1)];
+      const sx=-tl-2*ml-bl+tr+2*mr+br;
+      const sy=-tl-2*tc-tr+bl+2*bc+br;
+      const m=Math.sqrt(sx*sx+sy*sy);
+      mag[y*W+x]=m; if(m>maxM)maxM=m;
+    }
+  }
+  if(maxM>0) for(let i=0;i<mag.length;i++) mag[i]/=maxM;
+  return mag;
+}
+
+// RGB -> greyscale array
+function toGrey(data, W, H) {
+  const g=new Float32Array(W*H);
+  for(let i=0;i<data.length;i+=4) g[i>>2]=data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114;
+  return g;
+}
+
+// RGB -> HSL
+function rgbToHsl(r,g,b){
+  r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){
+    const d=mx-mn;
+    s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    if(mx===r)h=(g-b)/d+(g<b?6:0);
+    else if(mx===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h/=6;
+  }
+  return[h,s,l];
+}
+// HSL -> RGB
+function hslToRgb(h,s,l){
+  if(s===0){const v=Math.round(l*255);return[v,v,v];}
+  function hue(p,q,t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<0.5)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}
+  const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
+  return[Math.round(hue(p,q,h+1/3)*255),Math.round(hue(p,q,h)*255),Math.round(hue(p,q,h-1/3)*255)];
+}
+
+// ── OIL PAINTING ─────────────────────────────────────────────────────────────
+// Algorithm: kuwahara filter (variance-minimising patch) = signature oil look
+function applyOilEffect(ctx, orig, W, H) {
+  const src = orig.data;
+  const R = 4; // kuwahara radius — bigger = more painterly
+  const out = new Uint8ClampedArray(src.length);
+
+  for (let y=0;y<H;y++) {
+    for (let x=0;x<W;x++) {
+      // 4 quadrant patches around pixel
+      let bestVar=Infinity, bestR=0,bestG=0,bestB=0;
+      const quads=[[-R,-R,0,0],[0,-R,R,0],[-R,0,0,R],[0,0,R,R]];
+      for (const [x0,y0,x1,y1] of quads) {
+        let sr=0,sg=0,sb=0,cnt=0;
+        const pixels=[];
+        for (let dy=y0;dy<=y1;dy++) {
+          for (let dx=x0;dx<=x1;dx++) {
+            const nx=Math.min(W-1,Math.max(0,x+dx));
+            const ny=Math.min(H-1,Math.max(0,y+dy));
+            const i=(ny*W+nx)*4;
+            const rv=src[i],gv=src[i+1],bv=src[i+2];
+            sr+=rv;sg+=gv;sb+=bv;cnt++;
+            pixels.push(rv,gv,bv);
+          }
+        }
+        const mr=sr/cnt,mg=sg/cnt,mb=sb/cnt;
+        let vr=0,vg=0,vb=0;
+        for(let k=0;k<pixels.length;k+=3){
+          vr+=(pixels[k]-mr)**2;vg+=(pixels[k+1]-mg)**2;vb+=(pixels[k+2]-mb)**2;
+        }
+        const v=(vr+vg+vb)/cnt;
+        if(v<bestVar){bestVar=v;bestR=mr;bestG=mg;bestB=mb;}
+      }
+      const o=(y*W+x)*4;
+      out[o]=bestR;out[o+1]=bestG;out[o+2]=bestB;out[o+3]=255;
+    }
+  }
+
+  // Paint stroke texture on top
+  ctx.putImageData(new ImageData(out,W,H),0,0);
+  ctx.filter='saturate(1.7) contrast(1.08)';
+  ctx.drawImage(ctx.canvas,0,0);
+  ctx.filter='none';
+
+  // Warm varnish + brush stroke overlay
+  ctx.globalAlpha=0.12;ctx.fillStyle='#7a3a0a';ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=0.06;ctx.strokeStyle='#00000033';
+  for(let i=0;i<200;i++){
+    const px=Math.random()*W,py=Math.random()*H,len=10+Math.random()*22,a=Math.random()*Math.PI;
+    ctx.lineWidth=2+Math.random()*4;
+    ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+Math.cos(a)*len,py+Math.sin(a)*len);ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+// ── WATERCOLOUR ──────────────────────────────────────────────────────────────
+// Algorithm: edge-aware softening + pigment granulation + bleed pools + paper
+function applyWatercolorEffect(ctx, orig, W, H, r) {
+  const src = orig.data;
+
+  // TRUE WATERCOLOUR -- pure pixel-array compositing, no secondary canvas
+
+  // STEP 1: Build pale wash colours from photo hues
+  const washArr = new Uint8ClampedArray(src.length);
+  for (let i = 0; i < src.length; i += 4) {
+    const hsl = rgbToHsl(src[i], src[i+1], src[i+2]);
+    const h = hsl[0], s = hsl[1], l = hsl[2];
+    const ns = Math.min(0.5, s * 0.7);
+    const nl = 0.65 + l * 0.28;
+    const rgb = hslToRgb(h, ns, nl);
+    washArr[i] = rgb[0]; washArr[i+1] = rgb[1]; washArr[i+2] = rgb[2]; washArr[i+3] = 255;
+  }
+
+  // STEP 2: Blur wash heavily (watercolour bleeds)
+  const blurWash = boxBlur(washArr, W, H, 5);
+  const blurWash2 = boxBlur(washArr, W, H, 2);
+
+  // STEP 3: Composite wash over paper colour in pixel array (no secondary canvas)
+  const paper = [244, 237, 216];
+  const out = new Uint8ClampedArray(src.length);
+  for (let i = 0; i < src.length; i += 4) {
+    // Layer 1: paper
+    let or2 = paper[0], og = paper[1], ob = paper[2];
+    // Layer 2: first wash 60% opacity
+    const a1 = 0.60;
+    or2 = or2*(1-a1) + blurWash[i]*a1;
+    og  = og *(1-a1) + blurWash[i+1]*a1;
+    ob  = ob *(1-a1) + blurWash[i+2]*a1;
+    // Layer 3: second wash 25% opacity
+    const a2 = 0.25;
+    or2 = or2*(1-a2) + blurWash2[i]*a2;
+    og  = og *(1-a2) + blurWash2[i+1]*a2;
+    ob  = ob *(1-a2) + blurWash2[i+2]*a2;
+    out[i] = Math.round(or2); out[i+1] = Math.round(og);
+    out[i+2] = Math.round(ob); out[i+3] = 255;
+  }
+
+  // STEP 4: Edge darkening -- paint collects at contour lines
+  const grey = toGrey(src, W, H);
+  const mag  = sobelMag(grey, W, H);
+  for (let y = 1; y < H-1; y++) {
+    for (let x = 1; x < W-1; x++) {
+      const m = mag[y*W+x];
+      if (m > 0.15) {
+        const idx = (y*W+x)*4;
+        const dk = Math.min(0.52, (m-0.15)*1.3);
+        out[idx]   = Math.round(out[idx]   *(1-dk) + 55*dk);
+        out[idx+1] = Math.round(out[idx+1] *(1-dk) + 32*dk);
+        out[idx+2] = Math.round(out[idx+2] *(1-dk) + 12*dk);
+      }
+    }
+  }
+
+  // STEP 5: Wet-on-wet bloom pools (lighten random patches)
+  for (let b = 0; b < 10; b++) {
+    const bx = Math.floor(r()*W), by = Math.floor(r()*H);
+    const br2 = 20 + Math.floor(r()*55);
+    for (let y = Math.max(0,by-br2); y < Math.min(H,by+br2); y++) {
+      for (let x = Math.max(0,bx-br2); x < Math.min(W,bx+br2); x++) {
+        const dist = Math.sqrt((x-bx)*(x-bx)+(y-by)*(y-by));
+        if (dist < br2) {
+          const st = (1-dist/br2)*0.2;
+          const idx = (y*W+x)*4;
+          out[idx]   = Math.min(255, Math.round(out[idx]   + (244-out[idx])*st));
+          out[idx+1] = Math.min(255, Math.round(out[idx+1] + (237-out[idx+1])*st));
+          out[idx+2] = Math.min(255, Math.round(out[idx+2] + (216-out[idx+2])*st));
+        }
+      }
+    }
+  }
+
+  // STEP 6: Render
+  ctx.putImageData(new ImageData(out, W, H), 0, 0);
+
+  // STEP 7: Paper grain strokes
+  ctx.globalAlpha = 0.04;
+  ctx.strokeStyle = '#9a8060';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 2000; i++) {
+    const px = r()*W, py = r()*H, a = r()*Math.PI, len = 1.5+r()*4;
+    ctx.beginPath(); ctx.moveTo(px,py);
+    ctx.lineTo(px+Math.cos(a)*len,py+Math.sin(a)*len); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // STEP 8: Granulation pigment dots
+  for (let i = 0; i < 1800; i++) {
+    const px = Math.floor(r()*W), py = Math.floor(r()*H);
+    const lum = grey[py*W+px]/255;
+    if (r() > lum*0.65) {
+      ctx.globalAlpha = 0.022+r()*0.04;
+      ctx.fillStyle = lum<0.4 ? '#5a3820' : (lum<0.65 ? '#8a6040' : '#b89868');
+      ctx.fillRect(px,py,1,1);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // STEP 9: Edge vignette
+  const vig = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.28,W/2,H/2,Math.max(W,H)*0.82);
+  vig.addColorStop(0,'transparent');
+  vig.addColorStop(1,'rgba(80,50,20,0.28)');
+  ctx.fillStyle = vig; ctx.fillRect(0,0,W,H);
+}
+
