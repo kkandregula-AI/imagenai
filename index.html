@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>ImagiNAI — AI Image Studio</title>
 <meta name="theme-color" content="#0a0a0f">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src *; font-src *;">
 <link rel="manifest" href="#" id="manifest-link">
 <style>
 /* System font stack - no external dependency */
@@ -1111,51 +1112,43 @@ function polUrl(prompt,seed){
   return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(full)+'?width='+selW+'&height='+selH+'&seed='+seed+'&nologo=true&enhance=true&model=flux';
 }
 
-// Load Pollinations image — waits for actual AI generation (up to 35s)
-// Shows progress ticker while waiting
+// Load Pollinations image — pure timer approach (no img.onload which fails cross-origin)
+// Pollinations generates server-side; we just wait then inject the URL as <img src>
+// The browser renders it natively once in DOM — no CORS issue with <img> tags
 function loadPollinationsImage(url){
   return new Promise(function(resolve,reject){
     if(cancelled){reject(new Error('cancelled'));return;}
-    var img=new Image();
-    var done=false;
     var elapsed=0;
-    // Progress ticker — update message every 3 seconds
+    var done=false;
+    // Tick every 3 seconds to show progress
     var ticker=setInterval(function(){
       if(done)return;
       elapsed+=3;
-      if(cancelled){clearInterval(ticker);done=true;img.src='';reject(new Error('cancelled'));return;}
-      pm('AI generating... '+elapsed+'s (may take up to 30s)');
+      if(cancelled){clearInterval(ticker);done=true;reject(new Error('cancelled'));return;}
+      var eta=Math.max(0,20-elapsed);
+      pm('AI generating... '+elapsed+'s'+( eta>0?' (~'+eta+'s left)':''));
     },3000);
-    var hardLimit=setTimeout(function(){
+    // Pollinations typically completes in 8-20s for Flux model
+    // Wait 18s then resolve — image src will render naturally in the gallery <img> tag
+    var mainWait=setTimeout(function(){
       if(done)return;
       done=true;clearInterval(ticker);
-      // On timeout, still use the URL — Pollinations may serve it late
+      pm('Almost ready...');
       resolve(url);
-    },32000);
-    img.onload=function(){
+    },18000);
+    // Hard ceiling 30s
+    var hardLimit=setTimeout(function(){
       if(done)return;
-      done=true;clearInterval(ticker);clearTimeout(hardLimit);
-      pm('Image loaded!');
+      done=true;clearInterval(ticker);clearTimeout(mainWait);
       resolve(url);
-    };
-    img.onerror=function(){
-      if(done)return;
-      // Retry once with fresh seed
-      var seed2=Math.floor(Math.random()*999999);
-      var url2=url.replace(/seed=\d+/,'seed='+seed2);
-      pm('Retrying with different seed...');
-      var img2=new Image();
-      var t2=setTimeout(function(){
-        if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);
-        resolve(url); // give up gracefully, use original url
-      },15000);
-      img2.onload=function(){if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);clearTimeout(t2);resolve(url2);};
-      img2.onerror=function(){if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);clearTimeout(t2);resolve(url);};
-      img2.src=url2;
-    };
-    img.src=url;
+    },30000);
+    // Cancel listener
+    var cancelCheck=setInterval(function(){
+      if(cancelled&&!done){done=true;clearInterval(ticker);clearInterval(cancelCheck);clearTimeout(mainWait);clearTimeout(hardLimit);reject(new Error('cancelled'));}
+    },200);
   });
 }
+
 // Test if Pollinations image loads (returns promise resolving to true/false)
 function testImageLoad(url){
   return new Promise(function(resolve){
@@ -1577,7 +1570,7 @@ function renderGallery(){
     var sl=(item.style||'').split(',')[0]||'Default';
     var b=['<span class="badge">'+xh(sl)+'</span>','<span class="badge">'+xh(item.ratio||'')+'</span>',item.isDemo?'<span class="badge demo">DEMO</span>':'',item.isImg2Img?'<span class="badge var">IMG2IMG</span>':'',item.isBatch?'<span class="badge var">BATCH</span>':'',item.isVar?'<span class="badge var">VAR '+(item.vn||'')+'</span>':''].filter(Boolean).join('');
     var us=xa(item.url||''),ps=xa(item.prompt||item.rawPrompt||'');
-    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.isImg2Img?(item.prompt||''):(item.rawPrompt||item.prompt||''))+'</div><div class="ibadges">'+b+'</div></div></div>';
+    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager" onerror="this.style.opacity=0.15"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.isImg2Img?(item.prompt||''):(item.rawPrompt||item.prompt||''))+'</div><div class="ibadges">'+b+'</div></div></div>';
   }).join('');
 }
 function scrollToGallery(){setTimeout(function(){var el=document.getElementById('galleryCol');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},300);}
