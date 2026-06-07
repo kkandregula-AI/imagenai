@@ -637,9 +637,9 @@ function doStyleTransfer(raw){
   }).then(function(url){
     if(cancelled)return;
     ss('s3','done');ss('s4','act');
-    var prompt=raw||'Style transfer: '+selStyle;
-    saveHist(prompt);
-    pushGallery({url:url,prompt:prompt,rawPrompt:prompt,style:selStyle,ratio:'uploaded',seed:0,isImg2Img:true});
+    var styleLabel=selStyle.split(',')[0].charAt(0).toUpperCase()+selStyle.split(',')[0].slice(1)+' Style Transfer';
+    if(raw)saveHist(raw);
+    pushGallery({url:url,prompt:styleLabel,rawPrompt:styleLabel,style:selStyle,ratio:'uploaded',seed:0,isImg2Img:true});
     ss('s4','done');toast('Style applied!');scrollToGallery();
   }).catch(function(e){if(!cancelled)toast('Style transfer failed: '+sm(e));markFail();}).then(endUI, endUI);
 }
@@ -657,8 +657,9 @@ function doVariation(raw){
   }).then(function(res){
     if(cancelled)return;
     ss('s3','done');ss('s4','act');
-    var prompt=raw||'Image variation';saveHist(prompt);
-    res.urls.filter(Boolean).forEach(function(url,i){pushGallery({url:url,prompt:prompt,rawPrompt:prompt,style:selStyle,ratio:'uploaded',seed:res.seeds[i],isImg2Img:true,isVar:true,vn:i+1});});
+    var varLabel='Image Variation';
+    if(raw)saveHist(raw);
+    res.urls.filter(Boolean).forEach(function(url,i){pushGallery({url:url,prompt:varLabel+' '+(i+1),rawPrompt:varLabel+' '+(i+1),style:selStyle,ratio:'uploaded',seed:res.seeds[i],isImg2Img:true,isVar:true,vn:i+1});});
     ss('s4','done');toast(res.urls.filter(Boolean).length+' variations created!');scrollToGallery();
   }).catch(function(e){if(!cancelled)toast('Variation failed: '+sm(e));markFail();}).then(endUI, endUI);
 }
@@ -680,7 +681,7 @@ function doAnalyze(raw){
       document.getElementById('enhText').textContent=desc;
       document.getElementById('enhBox').classList.add('on');
       saveHist(desc);
-      pushGallery({url:url,prompt:desc,rawPrompt:raw||'Image analysis',style:selStyle,ratio:'uploaded',seed:seed,isImg2Img:true});
+      pushGallery({url:url,prompt:'AI Image Analysis',rawPrompt:'AI Image Analysis',style:selStyle,ratio:'uploaded',seed:seed,isImg2Img:true});
       ss('s4','done');toast('Analysis done - prompt filled!');scrollToGallery();
     });
   }).catch(function(e){if(!cancelled)toast('Analysis failed: '+sm(e));markFail();}).then(endUI, endUI);
@@ -795,7 +796,7 @@ function applyStyleTransfer(sourceDataUrl,styleName,seed){
       else if(styleName.indexOf('cyberpunk')!==-1||styleName.indexOf('neon')!==-1)applyCyberpunkEffect(ctx,origData,W,H,r);
       else if(styleName.indexOf('fantasy')!==-1||styleName.indexOf('magical')!==-1)applyFantasyEffect(ctx,origData,W,H,r);
       else applyFilmEffect(ctx,origData,W,H,r);
-      drawLabel(ctx,W,H,'Style: '+styleName.split(',')[0],styleName);
+      drawLabel(ctx,W,H,styleName.split(',')[0].toUpperCase()+' STYLE TRANSFER',styleName);
       resolve(c.toDataURL('image/jpeg',0.93));
     };
     img.onerror=function(){resolve(null);};
