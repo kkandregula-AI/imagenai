@@ -1155,40 +1155,48 @@ function proxyUrl(prompt,seed){
   return '/api/image?prompt='+encodeURIComponent(full)+'&width='+selW+'&height='+selH+'&seed='+seed+'&model=flux';
 }
 
-// Load Pollinations image — pure timer approach (no img.onload which fails cross-origin)
-// Pollinations generates server-side; we just wait then inject the URL as <img src>
-// The browser renders it natively once in DOM — no CORS issue with <img> tags
+// Load image via proxy — uses fetch() so we know when it's actually ready
 function loadPollinationsImage(url){
   return new Promise(function(resolve,reject){
     if(cancelled){reject(new Error('cancelled'));return;}
     var elapsed=0;
     var done=false;
-    // Tick every 3 seconds to show progress
     var ticker=setInterval(function(){
       if(done)return;
       elapsed+=3;
       if(cancelled){clearInterval(ticker);done=true;reject(new Error('cancelled'));return;}
-      var eta=Math.max(0,20-elapsed);
-      pm('AI generating... '+elapsed+'s'+( eta>0?' (~'+eta+'s left)':''));
+      pm('AI generating... '+elapsed+'s');
     },3000);
-    // Pollinations typically completes in 8-20s for Flux model
-    // Wait 18s then resolve — image src will render naturally in the gallery <img> tag
-    var mainWait=setTimeout(function(){
+    function finish(result){
       if(done)return;
-      done=true;clearInterval(ticker);
-      pm('Almost ready...');
-      resolve(url);
-    },18000);
-    // Hard ceiling 30s
-    var hardLimit=setTimeout(function(){
-      if(done)return;
-      done=true;clearInterval(ticker);clearTimeout(mainWait);
-      resolve(url);
-    },30000);
-    // Cancel listener
+      done=true;clearInterval(ticker);clearInterval(cancelCheck);
+      if(result)resolve(result);else reject(new Error('failed'));
+    }
+    // Use fetch() to actually download the image data as a blob
+    // Then create a local blob URL — works on all browsers, no CORS issues
+    fetch(url)
+      .then(function(r){
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.blob();
+      })
+      .then(function(blob){
+        var blobUrl=URL.createObjectURL(blob);
+        finish(blobUrl);
+      })
+      .catch(function(e){
+        // fetch failed — try direct Pollinations as last resort  
+        pm('Proxy failed, trying direct...');
+        var directUrl=url.indexOf('/api/image')===0
+          ?url.replace('/api/image?','https://image.pollinations.ai/prompt/').replace('prompt=','').replace('&width','?width').replace('&model=flux','')
+          :url;
+        // Just return the URL and let <img src> handle it
+        finish(url);
+      });
     var cancelCheck=setInterval(function(){
-      if(cancelled&&!done){done=true;clearInterval(ticker);clearInterval(cancelCheck);clearTimeout(mainWait);clearTimeout(hardLimit);reject(new Error('cancelled'));}
+      if(cancelled&&!done){done=true;clearInterval(ticker);clearInterval(cancelCheck);reject(new Error('cancelled'));}
     },200);
+    // 45s hard ceiling
+    setTimeout(function(){finish(url);},45000);
   });
 }
 
