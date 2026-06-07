@@ -1231,7 +1231,7 @@ function renderGallery(){
     var sl=(item.style||'').split(',')[0]||'Default';
     var b=['<span class="badge">'+xh(sl)+'</span>','<span class="badge">'+xh(item.ratio||'')+'</span>',item.isDemo?'<span class="badge demo">DEMO</span>':'',item.isImg2Img?'<span class="badge var">IMG2IMG</span>':'',item.isBatch?'<span class="badge var">BATCH</span>':'',item.isVar?'<span class="badge var">VAR '+(item.vn||'')+'</span>':''].filter(Boolean).join('');
     var us=xa(item.url||''),ps=xa(item.prompt||item.rawPrompt||'');
-    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.rawPrompt||item.prompt||'')+'</div><div class="ibadges">'+b+'</div></div></div>';
+    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.isImg2Img?(item.prompt||''):(item.rawPrompt||item.prompt||''))+'</div><div class="ibadges">'+b+'</div></div></div>';
   }).join('');
 }
 function scrollToGallery(){setTimeout(function(){var el=document.getElementById('galleryCol');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},300);}
