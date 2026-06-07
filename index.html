@@ -548,7 +548,7 @@ function genSingle(raw){
       if(isReal){
         // Step 1: Show canvas placeholder immediately so user sees something
         var canvasUrl=genUrl(prompt,seed);
-        var itemId=Date.now()+Math.random();
+        var itemId=Date.now();
         var placeholderItem={url:canvasUrl,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false,id:itemId,isPlaceholder:true};
         pushGallery(placeholderItem);
         ss('s3','done');ss('s4','act');
@@ -556,33 +556,63 @@ function genSingle(raw){
         scrollToGallery();
         endUI(); // release UI so user can do other things
 
-        // Step 2: Load real Pollinations image in background
-        var tried=[false,false]; // [proxy, direct]
-        function tryLoad(useProxy,attempt){
-          if(cancelled)return;
-          var imgUrl=useProxy?proxyUrl(prompt,seed):polUrl(prompt,seed);
-          pm('AI generating... attempt '+(attempt+1));
-          loadPollinationsImage(imgUrl).then(function(finalUrl){
-            // Replace placeholder in gallery with real image
-            for(var i=0;i<gallery.length;i++){
-              if(gallery[i].id===itemId){
-                gallery[i].url=finalUrl;
-                gallery[i].isPlaceholder=false;
+        // Step 2: Load real AI image in background via proxy
+        var proxyImgUrl = proxyUrl(prompt, seed);
+        var elapsed2 = 0;
+        var bgTicker = setInterval(function(){
+          elapsed2 += 3;
+          pm('AI generating real image... ' + elapsed2 + 's');
+        }, 3000);
+
+        fetch(proxyImgUrl)
+          .then(function(r){
+            clearInterval(bgTicker);
+            if(!r.ok) throw new Error('HTTP ' + r.status);
+            return r.blob();
+          })
+          .then(function(blob){
+            // Create object URL from blob - works cross-origin
+            var objUrl = URL.createObjectURL(blob);
+            // Find the placeholder card IMG tag in DOM and update it directly
+            var cards = document.querySelectorAll('.icard');
+            var updated = false;
+            for(var i = 0; i < gallery.length; i++){
+              if(gallery[i].id === itemId){
+                gallery[i].url = objUrl;
+                gallery[i].isPlaceholder = false;
+                updated = true;
                 break;
               }
             }
-            try{localStorage.setItem('imaginai_gallery',JSON.stringify(gallery));}catch(e){}
+            if(updated){
+              // Update the DOM img directly without full re-render
+              var imgs = document.querySelectorAll('#imgGrid .icard img');
+              // Find the right card by position (newest = first)
+              if(imgs.length > 0){
+                // Find which card matches itemId by checking all
+                var allCards = document.querySelectorAll('#imgGrid .icard');
+                // Re-render gallery to show real image
+                renderGallery();
+                toast('Real AI image ready!');
+                scrollToGallery();
+              }
+            }
+          })
+          .catch(function(e){
+            clearInterval(bgTicker);
+            // Proxy failed - try direct Pollinations URL as fallback
+            var directUrl = polUrl(prompt, seed);
+            // Update gallery item with direct URL (may or may not load on iOS)
+            for(var i = 0; i < gallery.length; i++){
+              if(gallery[i].id === itemId){
+                gallery[i].url = directUrl;
+                gallery[i].isPlaceholder = false;
+                break;
+              }
+            }
             renderGallery();
-            toast('Real AI image ready!');
-            scrollToGallery();
-          }).catch(function(){
-            // Try direct if proxy failed, vice versa
-            if(!tried[1]){tried[1]=true;tryLoad(!useProxy,attempt+1);}
+            toast('Using direct URL - may take a moment to appear');
           });
-        }
-        // Try proxy first if on vercel (has /api/), else direct
-        var isVercel=window.location.hostname.indexOf('vercel')!==-1||window.location.hostname.indexOf('localhost')===-1;
-        tryLoad(isVercel,0);
         return; // don't fall through to normal flow
 
       } else {
@@ -1609,9 +1639,14 @@ function tick(ms){return new Promise(function(r){setTimeout(r,ms);});}
 
 // Gallery
 function pushGallery(item){
-  item.id=Date.now()+Math.random();gallery.unshift(item);
+  if(!item.id)item.id=Date.now()+Math.random();
+  gallery.unshift(item);
   if(gallery.length>60)gallery=gallery.slice(0,60);totalImgs++;
-  try{localStorage.setItem('imaginai_gallery',JSON.stringify(gallery));}catch(e){}
+  // Don't save blob: URLs to localStorage - they expire with session
+  try{
+    var saveable=gallery.filter(function(g){return g.url&&g.url.indexOf('blob:')===-1;});
+    localStorage.setItem('imaginai_gallery',JSON.stringify(saveable));
+  }catch(e){}
   renderGallery();
 }
 function renderGallery(){
