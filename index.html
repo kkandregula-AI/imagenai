@@ -179,6 +179,7 @@ footer{margin-top:40px;border-top:1px solid var(--border);padding:16px;text-alig
   <div><span class="logo">ImagiNAI</span><span class="logo-sub">AI Image Studio</span></div>
   <div class="hdr-right">
     <div class="demo-pill" id="demoPill">+ DEMO</div>
+    <button class="key-btn" id="testBtn" onclick="testProxy()" style="background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:var(--green);display:none">Test</button>
     <button class="key-btn" onclick="openModal()"><span class="kdot" id="kdot"></span>API Key</button>
   </div>
 </header>
@@ -350,7 +351,30 @@ function init(){
   }
 }
 
-function updKeyDot(){document.getElementById('kdot').classList.toggle('on',!!apiKey);}
+function updKeyDot(){
+  document.getElementById('kdot').classList.toggle('on',!!apiKey);
+  var tb=document.getElementById('testBtn');
+  if(tb)tb.style.display=apiKey?'flex':'none';
+}
+function testProxy(){
+  var url='/api/image?prompt=red+apple&width=256&height=256&seed=1';
+  toast('Testing proxy... opening in new tab');
+  // Open proxy URL directly so user can see if it works
+  window.open(url,'_blank');
+  // Also test via fetch
+  pm('Testing proxy connection...');
+  fetch(url,{signal:AbortSignal.timeout(30000)})
+    .then(function(r){
+      toast('Proxy response: HTTP '+r.status+' ('+r.headers.get('content-type')+') size checking...');
+      return r.blob();
+    })
+    .then(function(b){
+      toast('Proxy OK! Blob size: '+b.size+' bytes. Image generation should work.');
+    })
+    .catch(function(e){
+      toast('Proxy FAILED: '+e.message+' - Check Vercel function logs');
+    });
+}
 function openModal(){document.getElementById('apiInput').value=apiKey;document.getElementById('modalBg').classList.add('on');}
 function closeModal(){document.getElementById('modalBg').classList.remove('on');}
 function saveKey(){
@@ -1702,7 +1726,7 @@ function renderGallery(){
     var sl=(item.style||'').split(',')[0]||'Default';
     var b=['<span class="badge">'+xh(sl)+'</span>','<span class="badge">'+xh(item.ratio||'')+'</span>',item.isDemo?'<span class="badge demo">DEMO</span>':'',item.isImg2Img?'<span class="badge var">IMG2IMG</span>':'',item.isBatch?'<span class="badge var">BATCH</span>':'',item.isVar?'<span class="badge var">VAR '+(item.vn||'')+'</span>':''].filter(Boolean).join('');
     var us=xa(item.url||''),ps=xa(item.prompt||item.rawPrompt||'');
-    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager" onerror="this.style.opacity=0.15"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.isImg2Img?(item.prompt||''):(item.rawPrompt||item.prompt||''))+'</div><div class="ibadges">'+b+'</div></div></div>';
+    return '<div class="icard" onclick="openLb(\''+us+'\',\''+ps+'\')"><div class="iwrap"><img src="'+us+'" alt="" loading="eager" onerror="this.style.opacity=0.08"><div class="ioverlay"><button class="obtn" onclick="event.stopPropagation();dlImg(\''+us+'\','+Math.round(item.id)+')">Save</button><button class="obtn" onclick="event.stopPropagation();delImg('+item.id+')">Remove</button></div></div><div class="imeta"><div class="iprompt">'+xh(item.isImg2Img?(item.prompt||''):(item.rawPrompt||item.prompt||''))+'</div><div class="ibadges">'+b+'</div></div></div>';
   }).join('');
 }
 function scrollToGallery(){setTimeout(function(){var el=document.getElementById('galleryCol');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},300);}
