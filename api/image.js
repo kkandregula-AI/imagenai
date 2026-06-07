@@ -1,48 +1,31 @@
-// Vercel API route: /api/image
-// Proxies Pollinations.ai requests server-side, returns image as response
-// This bypasses all CORS/CSP issues on iOS Safari
+// Vercel Serverless Function (Node.js) — proxies Pollinations.ai
+// File: api/image.js
 
-export const config = { runtime: 'edge' };
+module.exports = async function handler(req, res) {
+  const { prompt = 'beautiful landscape', width = '1024', height = '1024', seed, model = 'flux' } = req.query;
+  const s = seed || String(Math.floor(Math.random() * 999999));
+  const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${s}&nologo=true&enhance=true&model=${model}`;
 
-export default async function handler(req) {
-  const url = new URL(req.url);
-  const prompt = url.searchParams.get('prompt') || 'beautiful landscape';
-  const width  = url.searchParams.get('width')  || '1024';
-  const height = url.searchParams.get('height') || '1024';
-  const seed   = url.searchParams.get('seed')   || String(Math.floor(Math.random()*999999));
-  const model  = url.searchParams.get('model')  || 'flux';
-
-  const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true&model=${model}`;
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
 
   try {
-    const res = await fetch(polUrl, {
+    const fetch = (await import('node-fetch')).default;
+    const upstream = await fetch(polUrl, {
       headers: { 'User-Agent': 'ImagiNAI/1.0' },
-      signal: AbortSignal.timeout(45000)
+      timeout: 45000
     });
 
-    if (!res.ok) {
-      return new Response(JSON.stringify({ error: 'Pollinations error', status: res.status }), {
-        status: res.status,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: 'Upstream error', status: upstream.status });
+      return;
     }
 
-    const imageBuffer = await res.arrayBuffer();
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-
-    return new Response(imageBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-      }
-    });
+    const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    upstream.body.pipe(res);
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    res.status(500).json({ error: e.message });
   }
-}
+};
