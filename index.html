@@ -539,17 +539,19 @@ function genSingle(raw){
     ss('s1','done');saveHist(raw);
     ss('s2','act');pm('Building image...');
     var seed=rndSeed();
-    var url=genUrl(prompt,seed);
-    return tick(400).then(function(){
+    var url=getImageUrl(prompt,seed);
+    var isReal=!!apiKey;
+    return tick(isReal?200:400).then(function(){
       if(cancelled)return;
-      ss('s2','done');ss('s3','act');pm('Rendering...');
-      return waitRender();
+      ss('s2','done');ss('s3','act');pm(isReal?'Generating with AI (Pollinations)...':'Rendering...');
+      // For real AI images wait longer for Pollinations to generate
+      return waitRender(isReal?7000:1200);
     }).then(function(){
       if(cancelled)return;
       ss('s3','done');ss('s4','act');pm('Saving...');
       return tick(200);
     }).then(function(){
-      pushGallery({url:url,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:demoMode});
+      pushGallery({url:url,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:demoMode&&!apiKey});
       ss('s4','done');toast('Image ready!');enhanced='';
       document.getElementById('enhBox').classList.remove('on');
       scrollToGallery();
@@ -563,7 +565,7 @@ function genBatch(raw){
     if(cancelled)return;
     ss('s1','done');saveHist(raw);ss('s2','act');pm('Creating 4 seeds...');
     var seeds=[rndSeed(),rndSeed(),rndSeed(),rndSeed()];
-    var urls=seeds.map(function(s){return genUrl(prompt,s);});
+    var urls=seeds.map(function(s){return getImageUrl(prompt,s);});
     return tick(300).then(function(){
       ss('s2','done');ss('s3','act');pm('Rendering batch...');
       var p=Promise.resolve();
@@ -599,7 +601,7 @@ function genVar(raw){
     if(cancelled)return;
     ss('s1','done');saveHist(raw);ss('s2','act');pm('Building URLs...');
     var seeds=[rndSeed(),rndSeed(),rndSeed(),rndSeed()];
-    var urls=variants.map(function(v,i){return genUrl(v,seeds[i]);});
+    var urls=variants.map(function(v,i){return getImageUrl(v,seeds[i]);});
     return tick(300).then(function(){
       ss('s2','done');ss('s3','act');pm('Rendering variations...');
       var p=Promise.resolve();
@@ -628,7 +630,7 @@ function doStyleTransfer(raw){
   startUI('Applying style transfer...');
   ss('s1','act');pm('Reading image...');
   tick(200).then(function(){
-    ss('s1','done');ss('s2','act');pm('Applying '+selStyle.split(',')[0]+' style...');
+    ss('s1','done');ss('s2','act');pm((apiKey?'AI generating ':'Applying ')+selStyle.split(',')[0]+' style...');
     return applyStyleTransfer(uploadedDataUrl,selStyle,rndSeed());
   }).then(function(url){
     if(!url)throw new Error('Style transfer failed');
@@ -1091,6 +1093,40 @@ function applyVariation(sourceDataUrl,seed){
 // SCENE GENERATORS
 function mulberry32(seed){var s=(seed>>>0)||1;return function(){s+=0x6D2B79F5;var t=s;t=Math.imul(t^t>>>15,1|t);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296;};}
 
+// Smart image URL — uses Pollinations.ai (real AI) when possible,
+// falls back to canvas scene when offline/sandboxed
+function polUrl(prompt,seed){
+  var neg=document.getElementById('negInput').value.trim();
+  var styleTag=selStyle!=='photorealistic'?', '+selStyle:'';
+  var negTag=neg?' --no '+neg:'';
+  var full=(prompt+styleTag+negTag).slice(0,1800);
+  return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(full)+'?width='+selW+'&height='+selH+'&seed='+seed+'&nologo=true&enhance=true&model=flux';
+}
+
+// Test if Pollinations image loads (returns promise resolving to true/false)
+function testImageLoad(url){
+  return new Promise(function(resolve){
+    var img=new Image();
+    var done=false;
+    var t=setTimeout(function(){if(!done){done=true;img.src='';resolve(false);}},8000);
+    img.onload=function(){if(!done){done=true;clearTimeout(t);resolve(true);}};
+    img.onerror=function(){if(!done){done=true;clearTimeout(t);resolve(false);}};
+    img.crossOrigin='anonymous';
+    img.src=url;
+  });
+}
+
+// Main image generator — Pollinations when API key set, canvas fallback otherwise
+function getImageUrl(prompt,seed){
+  // Use Pollinations (real AI) when API key is set — means user is serious/deployed
+  // Use canvas when no key (demo mode / sandboxed iframe)
+  if(apiKey){
+    return polUrl(prompt,seed);
+  }
+  // Canvas-generated scene (demo / no-key mode)
+  return genUrl(prompt,seed);
+}
+
 function genUrl(prompt,seed){
   var c=document.createElement('canvas');
   var W=c.width=selW>selH?512:(selW===selH?512:288);
@@ -1457,14 +1493,15 @@ function setBSlot(i,state,url){
   if(state==='done'&&url){if(img){img.src=url;img.style.display='block';}if(lbl)lbl.style.display='none';}
   else if(state==='ld'){var ico=el.querySelector('.bs-ico');if(ico)ico.textContent='...';}
 }
-function waitRender(){
+function waitRender(ms){
+  var wait=ms||(900+Math.random()*600);
   return new Promise(function(res,rej){
     if(cancelled){rej(new Error('cancelled'));return;}
     var done=false;
     var finish=function(ok){if(done)return;done=true;clearInterval(poll);ok?res():rej(new Error('cancelled'));};
     var poll=setInterval(function(){if(cancelled)finish(false);},150);
-    setTimeout(function(){finish(!cancelled);},900+Math.random()*600);
-    setTimeout(function(){finish(!cancelled);},30000);
+    setTimeout(function(){finish(!cancelled);},wait);
+    setTimeout(function(){finish(!cancelled);},35000);
   });
 }
 function fetchT(url,opts,ms){
