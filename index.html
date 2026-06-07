@@ -538,87 +538,48 @@ function genSingle(raw){
   getPrompt(raw).then(function(prompt){
     if(cancelled)return;
     ss('s1','done');saveHist(raw);
-    ss('s2','act');pm('Building image...');
+    ss('s2','act');pm('Preparing...');
     var seed=rndSeed();
     var isReal=!!apiKey;
     return tick(200).then(function(){
       if(cancelled)return;
       ss('s2','done');ss('s3','act');
-
       if(isReal){
-        // Step 1: Show canvas placeholder immediately so user sees something
-        var canvasUrl=genUrl(prompt,seed);
-        var itemId=Date.now();
-        var placeholderItem={url:canvasUrl,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false,id:itemId,isPlaceholder:true};
-        pushGallery(placeholderItem);
-        ss('s3','done');ss('s4','act');
-        pm('AI generating real image... (15-30s)');
-        scrollToGallery();
-        endUI(); // release UI so user can do other things
-
-        // Step 2: Load real AI image in background via proxy
-        var proxyImgUrl = proxyUrl(prompt, seed);
-        var elapsed2 = 0;
-        var bgTicker = setInterval(function(){
-          elapsed2 += 3;
-          pm('AI generating real image... ' + elapsed2 + 's');
-        }, 3000);
-
-        fetch(proxyImgUrl)
+        // Real AI: fetch from proxy, show live timer
+        var imgUrl=proxyUrl(prompt,seed);
+        var elapsed=0;
+        pm('Sending to AI... 0s');
+        var ticker=setInterval(function(){
+          elapsed+=1;
+          pm('AI generating... '+elapsed+'s (please wait)');
+        },1000);
+        return fetch(imgUrl)
           .then(function(r){
-            clearInterval(bgTicker);
-            if(!r.ok) throw new Error('HTTP ' + r.status);
+            clearInterval(ticker);
+            if(!r.ok)throw new Error('Proxy returned '+r.status);
+            pm('Image received, loading...');
             return r.blob();
           })
           .then(function(blob){
-            // Create object URL from blob - works cross-origin
-            var objUrl = URL.createObjectURL(blob);
-            // Find the placeholder card IMG tag in DOM and update it directly
-            var cards = document.querySelectorAll('.icard');
-            var updated = false;
-            for(var i = 0; i < gallery.length; i++){
-              if(gallery[i].id === itemId){
-                gallery[i].url = objUrl;
-                gallery[i].isPlaceholder = false;
-                updated = true;
-                break;
-              }
-            }
-            if(updated){
-              // Update the DOM img directly without full re-render
-              var imgs = document.querySelectorAll('#imgGrid .icard img');
-              // Find the right card by position (newest = first)
-              if(imgs.length > 0){
-                // Find which card matches itemId by checking all
-                var allCards = document.querySelectorAll('#imgGrid .icard');
-                // Re-render gallery to show real image
-                renderGallery();
-                toast('Real AI image ready!');
-                scrollToGallery();
-              }
-            }
+            if(cancelled)return null;
+            if(blob.size<1000)throw new Error('Image too small - generation failed');
+            return URL.createObjectURL(blob);
           })
-          .catch(function(e){
-            clearInterval(bgTicker);
-            // Proxy failed - try direct Pollinations URL as fallback
-            var directUrl = polUrl(prompt, seed);
-            // Update gallery item with direct URL (may or may not load on iOS)
-            for(var i = 0; i < gallery.length; i++){
-              if(gallery[i].id === itemId){
-                gallery[i].url = directUrl;
-                gallery[i].isPlaceholder = false;
-                break;
-              }
-            }
-            renderGallery();
-            toast('Using direct URL - may take a moment to appear');
+          .then(function(objUrl){
+            if(cancelled||!objUrl)return;
+            ss('s3','done');ss('s4','act');pm('Saving...');
+            return tick(100).then(function(){
+              pushGallery({url:objUrl,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false});
+              ss('s4','done');toast('Image ready!');enhanced='';
+              document.getElementById('enhBox').classList.remove('on');
+              scrollToGallery();
+            });
           });
-        return; // don't fall through to normal flow
-
       } else {
-        // Demo mode: instant canvas
+        // Demo: canvas drawing
+        pm('Rendering scene...');
         var url=genUrl(prompt,seed);
-        return waitRender(1200).then(function(){
+        return waitRender(1000).then(function(){
           if(cancelled)return;
           ss('s3','done');ss('s4','act');pm('Saving...');
           return tick(100);
@@ -631,8 +592,18 @@ function genSingle(raw){
         });
       }
     });
-  }).catch(function(e){if(!cancelled)toast('Failed: '+sm(e));markFail();}).then(endUI, endUI);
+  }).catch(function(e){
+    if(!cancelled){
+      var msg=sm(e);
+      toast('Failed: '+msg);
+      // Show retry button in progress area
+      document.getElementById('progMsg').innerHTML=
+        'Error: '+msg+'<br><button onclick="generate()" style="margin-top:8px;background:var(--accent);border:none;color:#fff;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:0.8rem">Retry</button>';
+    }
+    markFail();
+  }).then(endUI,endUI);
 }
+
 
 function genBatch(raw){
   startUI('Batch generating 4 images...');showBatch(4);
