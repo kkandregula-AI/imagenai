@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/image.js": {
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -8,12 +13,6 @@
           "value": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src *; font-src *;"
         }
       ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/image",
-      "destination": "/api/image.js"
     }
   ]
 }
