@@ -539,22 +539,30 @@ function genSingle(raw){
     ss('s1','done');saveHist(raw);
     ss('s2','act');pm('Building image...');
     var seed=rndSeed();
-    var url=getImageUrl(prompt,seed);
     var isReal=!!apiKey;
-    return tick(isReal?200:400).then(function(){
+    return tick(200).then(function(){
       if(cancelled)return;
-      ss('s2','done');ss('s3','act');pm(isReal?'Generating with AI (Pollinations)...':'Rendering...');
-      // For real AI images wait longer for Pollinations to generate
-      return waitRender(isReal?7000:1200);
-    }).then(function(){
-      if(cancelled)return;
+      ss('s2','done');ss('s3','act');
+      pm(isReal?'AI generating image...':'Rendering scene...');
+      // Canvas: instant; Pollinations: wait for real load
+      if(isReal){
+        var url=polUrl(prompt,seed);
+        return loadPollinationsImage(url).then(function(finalUrl){
+          return finalUrl;
+        });
+      } else {
+        var url=genUrl(prompt,seed);
+        return waitRender(1200).then(function(){return url;});
+      }
+    }).then(function(url){
+      if(cancelled||!url)return;
       ss('s3','done');ss('s4','act');pm('Saving...');
-      return tick(200);
-    }).then(function(){
-      pushGallery({url:url,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:demoMode&&!apiKey});
-      ss('s4','done');toast('Image ready!');enhanced='';
-      document.getElementById('enhBox').classList.remove('on');
-      scrollToGallery();
+      return tick(100).then(function(){
+        pushGallery({url:url,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false});
+        ss('s4','done');toast('Image ready!');enhanced='';
+        document.getElementById('enhBox').classList.remove('on');
+        scrollToGallery();
+      });
     });
   }).catch(function(e){if(!cancelled)toast('Failed: '+sm(e));markFail();}).then(endUI, endUI);
 }
@@ -565,7 +573,7 @@ function genBatch(raw){
     if(cancelled)return;
     ss('s1','done');saveHist(raw);ss('s2','act');pm('Creating 4 seeds...');
     var seeds=[rndSeed(),rndSeed(),rndSeed(),rndSeed()];
-    var urls=seeds.map(function(s){return getImageUrl(prompt,s);});
+    var urls=seeds.map(function(s){return apiKey?polUrl(prompt,s):genUrl(prompt,s);});
     return tick(300).then(function(){
       ss('s2','done');ss('s3','act');pm('Rendering batch...');
       var p=Promise.resolve();
@@ -601,7 +609,7 @@ function genVar(raw){
     if(cancelled)return;
     ss('s1','done');saveHist(raw);ss('s2','act');pm('Building URLs...');
     var seeds=[rndSeed(),rndSeed(),rndSeed(),rndSeed()];
-    var urls=variants.map(function(v,i){return getImageUrl(v,seeds[i]);});
+    var urls=variants.map(function(v,i){return apiKey?polUrl(v,seeds[i]):genUrl(v,seeds[i]);});
     return tick(300).then(function(){
       ss('s2','done');ss('s3','act');pm('Rendering variations...');
       var p=Promise.resolve();
@@ -1103,6 +1111,51 @@ function polUrl(prompt,seed){
   return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(full)+'?width='+selW+'&height='+selH+'&seed='+seed+'&nologo=true&enhance=true&model=flux';
 }
 
+// Load Pollinations image — waits for actual AI generation (up to 35s)
+// Shows progress ticker while waiting
+function loadPollinationsImage(url){
+  return new Promise(function(resolve,reject){
+    if(cancelled){reject(new Error('cancelled'));return;}
+    var img=new Image();
+    var done=false;
+    var elapsed=0;
+    // Progress ticker — update message every 3 seconds
+    var ticker=setInterval(function(){
+      if(done)return;
+      elapsed+=3;
+      if(cancelled){clearInterval(ticker);done=true;img.src='';reject(new Error('cancelled'));return;}
+      pm('AI generating... '+elapsed+'s (may take up to 30s)');
+    },3000);
+    var hardLimit=setTimeout(function(){
+      if(done)return;
+      done=true;clearInterval(ticker);
+      // On timeout, still use the URL — Pollinations may serve it late
+      resolve(url);
+    },32000);
+    img.onload=function(){
+      if(done)return;
+      done=true;clearInterval(ticker);clearTimeout(hardLimit);
+      pm('Image loaded!');
+      resolve(url);
+    };
+    img.onerror=function(){
+      if(done)return;
+      // Retry once with fresh seed
+      var seed2=Math.floor(Math.random()*999999);
+      var url2=url.replace(/seed=\d+/,'seed='+seed2);
+      pm('Retrying with different seed...');
+      var img2=new Image();
+      var t2=setTimeout(function(){
+        if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);
+        resolve(url); // give up gracefully, use original url
+      },15000);
+      img2.onload=function(){if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);clearTimeout(t2);resolve(url2);};
+      img2.onerror=function(){if(done)return;done=true;clearInterval(ticker);clearTimeout(hardLimit);clearTimeout(t2);resolve(url);};
+      img2.src=url2;
+    };
+    img.src=url;
+  });
+}
 // Test if Pollinations image loads (returns promise resolving to true/false)
 function testImageLoad(url){
   return new Promise(function(resolve){
@@ -1111,7 +1164,6 @@ function testImageLoad(url){
     var t=setTimeout(function(){if(!done){done=true;img.src='';resolve(false);}},8000);
     img.onload=function(){if(!done){done=true;clearTimeout(t);resolve(true);}};
     img.onerror=function(){if(!done){done=true;clearTimeout(t);resolve(false);}};
-    img.crossOrigin='anonymous';
     img.src=url;
   });
 }
