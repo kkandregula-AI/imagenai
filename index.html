@@ -545,41 +545,20 @@ function genSingle(raw){
       if(cancelled)return;
       ss('s2','done');ss('s3','act');
       if(isReal){
-        // Real AI: fetch from proxy, show live timer
-        var imgUrl=proxyUrl(prompt,seed);
-        var elapsed=0;
-        pm('Sending to AI... 0s');
-        var ticker=setInterval(function(){
-          elapsed+=1;
-          pm('AI generating... '+elapsed+'s (please wait)');
-        },1000);
-        return fetch(imgUrl)
-          .then(function(r){
-            clearInterval(ticker);
-            if(!r.ok)throw new Error('Proxy returned '+r.status);
-            pm('Image received, loading...');
-            return r.blob();
-          })
-          .then(function(blob){
-            if(cancelled)return null;
-            if(blob.size<1000)throw new Error('Image too small - generation failed');
-            return URL.createObjectURL(blob);
-          })
-          .then(function(objUrl){
-            if(cancelled||!objUrl)return;
-            ss('s3','done');ss('s4','act');pm('Saving...');
-            return tick(100).then(function(){
-              pushGallery({url:objUrl,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false});
-              ss('s4','done');toast('Image ready!');enhanced='';
-              document.getElementById('enhBox').classList.remove('on');
-              scrollToGallery();
-            });
+        return fetchAiImage(prompt,seed).then(function(objUrl){
+          if(cancelled||!objUrl)return;
+          ss('s3','done');ss('s4','act');pm('Saving...');
+          return tick(100).then(function(){
+            pushGallery({url:objUrl,prompt:prompt,rawPrompt:raw,style:selStyle,ratio:selW+'x'+selH,seed:seed,isDemo:false});
+            ss('s4','done');toast('Image ready!');enhanced='';
+            document.getElementById('enhBox').classList.remove('on');
+            scrollToGallery();
           });
+        });
       } else {
-        // Demo: canvas drawing
-        pm('Rendering scene...');
+        pm('Rendering demo scene...');
         var url=genUrl(prompt,seed);
-        return waitRender(1000).then(function(){
+        return waitRender(800).then(function(){
           if(cancelled)return;
           ss('s3','done');ss('s4','act');pm('Saving...');
           return tick(100);
@@ -594,14 +573,62 @@ function genSingle(raw){
     });
   }).catch(function(e){
     if(!cancelled){
-      var msg=sm(e);
-      toast('Failed: '+msg);
-      // Show retry button in progress area
-      document.getElementById('progMsg').innerHTML=
-        'Error: '+msg+'<br><button onclick="generate()" style="margin-top:8px;background:var(--accent);border:none;color:#fff;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:0.8rem">Retry</button>';
+      toast('Failed: '+sm(e));
+      document.getElementById('progMsg').innerHTML='Error: '+sm(e)+
+        '<br><button onclick="generate()" style="margin-top:8px;background:var(--accent);border:none;color:#fff;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:0.8rem">Retry</button>';
     }
     markFail();
   }).then(endUI,endUI);
+}
+
+// Core AI image fetcher — tries proxy, then direct Pollinations
+function fetchAiImage(prompt,seed){
+  var elapsed=0;
+  var ticker=setInterval(function(){
+    elapsed+=1;
+    if(!cancelled)pm('AI generating... '+elapsed+'s');
+  },1000);
+
+  function cleanup(){clearInterval(ticker);}
+
+  // Try 1: Vercel proxy (same-origin, no CORS issues)
+  function tryProxy(){
+    pm('Fetching via proxy...');
+    return fetchWithTimeout(proxyUrl(prompt,seed), 40000)
+      .then(function(r){
+        if(!r.ok)throw new Error('Proxy HTTP '+r.status);
+        return r.blob();
+      })
+      .then(function(blob){
+        if(blob.size<2000)throw new Error('Proxy returned empty image');
+        cleanup();
+        return URL.createObjectURL(blob);
+      });
+  }
+
+  // Try 2: Direct Pollinations (works on some networks/browsers)
+  function tryDirect(){
+    pm('Trying direct connection...');
+    return fetchWithTimeout(polUrl(prompt,seed), 40000)
+      .then(function(r){
+        if(!r.ok)throw new Error('Direct HTTP '+r.status);
+        return r.blob();
+      })
+      .then(function(blob){
+        if(blob.size<2000)throw new Error('Direct returned empty image');
+        cleanup();
+        return URL.createObjectURL(blob);
+      });
+  }
+
+  // Try proxy first, fall back to direct
+  return tryProxy().catch(function(e1){
+    pm('Proxy failed ('+sm(e1)+'), trying direct...');
+    return tryDirect().catch(function(e2){
+      cleanup();
+      throw new Error('Both proxy and direct failed. Check Vercel logs. ('+sm(e2)+')');
+    });
+  });
 }
 
 
@@ -1139,7 +1166,7 @@ function applyVariation(sourceDataUrl,seed){
 // SCENE GENERATORS
 function mulberry32(seed){var s=(seed>>>0)||1;return function(){s+=0x6D2B79F5;var t=s;t=Math.imul(t^t>>>15,1|t);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296;};}
 
-// Build Pollinations URL (direct — works when not blocked)
+// Build full-size Pollinations URL
 function polUrl(prompt,seed){
   var neg=document.getElementById('negInput').value.trim();
   var styleTag=selStyle!=='photorealistic'?', '+selStyle:'';
@@ -1147,13 +1174,22 @@ function polUrl(prompt,seed){
   var full=(prompt+styleTag+negTag).slice(0,1800);
   return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(full)+'?width='+selW+'&height='+selH+'&seed='+seed+'&nologo=true&model=flux';
 }
-// Proxy URL (works when api/image.js is deployed on Vercel)
+// Proxy URL via Vercel api route
 function proxyUrl(prompt,seed){
   var neg=document.getElementById('negInput').value.trim();
   var styleTag=selStyle!=='photorealistic'?', '+selStyle:'';
   var negTag=neg?' --no '+neg:'';
   var full=(prompt+styleTag+negTag).slice(0,1800);
-  return '/api/image?prompt='+encodeURIComponent(full)+'&width='+selW+'&height='+selH+'&seed='+seed+'&model=flux';
+  // Use 768x768 for faster generation (still high quality)
+  return '/api/image?prompt='+encodeURIComponent(full)+'&width=768&height=768&seed='+seed+'&model=flux';
+}
+// Try fetching from a URL with AbortController timeout
+function fetchWithTimeout(url, timeoutMs){
+  var controller=new AbortController();
+  var timer=setTimeout(function(){controller.abort();},timeoutMs);
+  return fetch(url,{signal:controller.signal})
+    .then(function(r){clearTimeout(timer);return r;})
+    .catch(function(e){clearTimeout(timer);throw e;});
 }
 
 // Load image via proxy — uses fetch() so we know when it's actually ready
