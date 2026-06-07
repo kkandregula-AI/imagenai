@@ -1,66 +1,87 @@
-// Vercel Serverless Function — proxies Pollinations.ai images
-// Deployed at: /api/image?prompt=...&width=...&height=...&seed=...
+// ImagiNAI - Vercel Serverless Function
+// Proxies Pollinations.ai to avoid iOS Safari CORS restrictions
+// Uses Node.js built-in https module - no npm dependencies needed
 
 const https = require('https');
-const http = require('http');
 
 module.exports = async function handler(req, res) {
-  // Allow CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
 
-  const { prompt = 'beautiful landscape', width = '1024', height = '1024', seed, model = 'flux' } = req.query;
+  const {
+    prompt = 'beautiful landscape',
+    width = '768',
+    height = '768', 
+    seed,
+    model = 'flux'
+  } = req.query;
+
   const s = seed || String(Math.floor(Math.random() * 999999));
-  
-  const encodedPrompt = encodeURIComponent(prompt);
-  const polPath = `/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${s}&nologo=true&enhance=true&model=${model}`;
-  
-  const options = {
-    hostname: 'image.pollinations.ai',
-    port: 443,
-    path: polPath,
-    method: 'GET',
-    headers: { 'User-Agent': 'ImagiNAI-Proxy/1.0' },
-    timeout: 50000
-  };
+  const fullPrompt = encodeURIComponent(prompt);
+  const path = `/prompt/${fullPrompt}?width=${width}&height=${height}&seed=${s}&nologo=true&enhance=true&model=${model}`;
+
+  console.log('Fetching:', `https://image.pollinations.ai${path}`);
 
   return new Promise((resolve) => {
-    const request = https.request(options, (upstream) => {
+    const req2 = https.get({
+      hostname: 'image.pollinations.ai',
+      path: path,
+      port: 443,
+      headers: { 'User-Agent': 'Mozilla/5.0 ImagiNAI/1.0' }
+    }, (upstream) => {
+      console.log('Upstream status:', upstream.statusCode);
+      
+      // Handle redirects
+      if (upstream.statusCode === 301 || upstream.statusCode === 302) {
+        const location = upstream.headers['location'];
+        console.log('Redirect to:', location);
+        res.writeHead(302, { 'Location': location, 'Access-Control-Allow-Origin': '*' });
+        res.end();
+        resolve();
+        return;
+      }
+
       if (upstream.statusCode !== 200) {
-        res.status(upstream.statusCode || 500).json({ 
-          error: 'Upstream error', 
-          status: upstream.statusCode,
-          url: `https://image.pollinations.ai${polPath}`
+        res.status(upstream.statusCode).json({
+          error: 'Pollinations returned ' + upstream.statusCode,
+          path: path
         });
         resolve();
         return;
       }
 
-      const contentType = upstream.headers['content-type'] || 'image/jpeg';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.setHeader('X-Proxy', 'ImagiNAI');
-      
-      upstream.pipe(res);
-      upstream.on('end', resolve);
-      upstream.on('error', (e) => {
-        if (!res.headersSent) res.status(500).json({ error: e.message });
-        resolve();
+      const ct = upstream.headers['content-type'] || 'image/jpeg';
+      res.writeHead(200, {
+        'Content-Type': ct,
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*',
+        'X-Proxied-By': 'ImagiNAI'
       });
+
+      upstream.pipe(res);
+      res.on('finish', resolve);
+      res.on('error', resolve);
     });
 
-    request.on('timeout', () => {
-      request.destroy();
-      if (!res.headersSent) res.status(504).json({ error: 'Pollinations timeout after 50s' });
+    req2.setTimeout(55000, () => {
+      req2.destroy();
+      if (!res.headersSent) {
+        res.status(504).json({ error: 'Timeout: Pollinations took too long' });
+      }
       resolve();
     });
 
-    request.on('error', (e) => {
-      if (!res.headersSent) res.status(500).json({ error: e.message });
+    req2.on('error', (err) => {
+      console.error('Request error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      }
       resolve();
     });
-
-    request.end();
   });
 };
