@@ -581,54 +581,93 @@ function genSingle(raw){
   }).then(endUI,endUI);
 }
 
-// Core AI image fetcher — tries proxy, then direct Pollinations
-function fetchAiImage(prompt,seed){
-  var elapsed=0;
-  var ticker=setInterval(function(){
-    elapsed+=1;
-    if(!cancelled)pm('AI generating... '+elapsed+'s');
-  },1000);
+// Core AI image fetcher
+// Strategy: try proxy fetch (same-origin, no CORS) first
+// If proxy fails: use <img> preloader which bypasses CORS on iOS
+function fetchAiImage(prompt, seed){
+  var elapsed = 0;
+  var ticker = setInterval(function(){
+    elapsed += 1;
+    if(!cancelled) pm('AI generating... ' + elapsed + 's');
+  }, 1000);
+  function cleanup(){ clearInterval(ticker); }
 
-  function cleanup(){clearInterval(ticker);}
-
-  // Try 1: Vercel proxy (same-origin, no CORS issues)
+  // Method 1: Fetch from Vercel proxy (same-origin = no CORS issue)
   function tryProxy(){
-    pm('Fetching via proxy...');
-    return fetchWithTimeout(proxyUrl(prompt,seed), 40000)
+    pm('Connecting to AI...');
+    return fetchWithTimeout(proxyUrl(prompt, seed), 45000)
       .then(function(r){
-        if(!r.ok)throw new Error('Proxy HTTP '+r.status);
+        if(!r.ok) throw new Error('Proxy HTTP ' + r.status);
         return r.blob();
       })
       .then(function(blob){
-        if(blob.size<2000)throw new Error('Proxy returned empty image');
+        if(blob.size < 2000) throw new Error('Empty image from proxy');
         cleanup();
         return URL.createObjectURL(blob);
       });
   }
 
-  // Try 2: Direct Pollinations (works on some networks/browsers)
-  function tryDirect(){
-    pm('Trying direct connection...');
-    return fetchWithTimeout(polUrl(prompt,seed), 40000)
-      .then(function(r){
-        if(!r.ok)throw new Error('Direct HTTP '+r.status);
-        return r.blob();
-      })
-      .then(function(blob){
-        if(blob.size<2000)throw new Error('Direct returned empty image');
+  // Method 2: Preload via <img> tag (bypasses fetch CORS on iOS Safari)
+  // Returns a promise that resolves to the direct Pollinations URL once loaded
+  function tryImgTag(){
+    pm('Loading via image tag...');
+    return new Promise(function(resolve, reject){
+      var directUrl = polUrl(prompt, seed);
+      var img = new Image();
+      var done = false;
+      var t = setTimeout(function(){
+        if(done) return;
+        done = true;
+        img.src = '';
+        reject(new Error('Image tag timeout after 40s'));
+      }, 40000);
+      img.onload = function(){
+        if(done) return;
+        done = true;
+        clearTimeout(t);
         cleanup();
-        return URL.createObjectURL(blob);
-      });
-  }
-
-  // Try proxy first, fall back to direct
-  return tryProxy().catch(function(e1){
-    pm('Proxy failed ('+sm(e1)+'), trying direct...');
-    return tryDirect().catch(function(e2){
-      cleanup();
-      throw new Error('Both proxy and direct failed. Check Vercel logs. ('+sm(e2)+')');
+        // Image loaded — draw it to canvas to get a data URL we can store
+        try {
+          var c = document.createElement('canvas');
+          c.width = img.naturalWidth || 768;
+          c.height = img.naturalHeight || 768;
+          var ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve(c.toDataURL('image/jpeg', 0.92));
+        } catch(canvasErr) {
+          // Canvas tainted (cross-origin) — just use the direct URL
+          resolve(directUrl);
+        }
+      };
+      img.onerror = function(){
+        if(done) return;
+        done = true;
+        clearTimeout(t);
+        reject(new Error('Image failed to load'));
+      };
+      img.crossOrigin = 'anonymous';
+      img.src = directUrl;
     });
-  });
+  }
+
+  // Method 3: Last resort — inject URL directly and trust the browser to render it
+  function tryDirectUrl(){
+    pm('Injecting direct URL...');
+    cleanup();
+    var directUrl = polUrl(prompt, seed);
+    // Return the URL directly - <img src> in gallery card will handle it
+    return Promise.resolve(directUrl);
+  }
+
+  return tryProxy()
+    .catch(function(e1){
+      pm('Proxy failed (' + sm(e1) + '), trying image preload...');
+      return tryImgTag();
+    })
+    .catch(function(e2){
+      pm('Image tag failed (' + sm(e2) + '), using direct URL...');
+      return tryDirectUrl();
+    });
 }
 
 
