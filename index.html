@@ -327,7 +327,7 @@ var DEMO_PROMPTS=[
 var apiKey='',selStyle='photorealistic',selW=1024,selH=1024;
 var totalIn=0,totalOut=0,totalCalls=0,totalImgs=0;
 var cacheSaved=0,cacheHits=0,cacheCalls=0;
-var gallery=[],history=[],running=false,cancelled=false,demoMode=false,mode='single',enhanced='';
+var gallery=[],promptHistory=[],running=false,cancelled=false,demoMode=false,mode='single',enhanced='';
 var uploadedDataUrl=null,imgMode='style',sourceMode='text';
 var abortCtrl=null;
 
@@ -335,10 +335,18 @@ var abortCtrl=null;
 function init(){
   try{apiKey=localStorage.getItem('imaginai_key')||'';}catch(e){}
   try{var r=localStorage.getItem('imaginai_gallery');if(r){gallery=JSON.parse(r);if(!Array.isArray(gallery))gallery=[];}}catch(e){gallery=[];}
-  try{var r2=localStorage.getItem('imaginai_hist');if(r2){history=JSON.parse(r2);if(!Array.isArray(history))history=[];}}catch(e){history=[];}
+  try{var r2=localStorage.getItem('imaginai_hist');if(r2){promptHistory=JSON.parse(r2);if(!Array.isArray(promptHistory))promptHistory=[];}}catch(e){promptHistory=[];}
   updKeyDot();renderGallery();renderHist();
   document.getElementById('promptInput').value=DEMO_PROMPTS[0].raw;
-  if(!apiKey)setTimeout(function(){document.getElementById('modalBg').classList.add('on');},700);
+  if(!apiKey){
+    // Auto-enter demo mode — no modal nag, just start with demo ready
+    setTimeout(function(){
+      demoMode=true;
+      document.getElementById('demoBanner').classList.add('on');
+      document.getElementById('demoPill').classList.add('on');
+      toast('Demo mode - upload a photo or click Generate!');
+    },400);
+  }
 }
 
 function updKeyDot(){document.getElementById('kdot').classList.toggle('on',!!apiKey);}
@@ -356,7 +364,7 @@ function startDemo(){
   demoMode=true;closeModal();
   document.getElementById('demoBanner').classList.add('on');
   document.getElementById('demoPill').classList.add('on');
-  gallery=gallery.filter(function(i){return !i.isDemo;});
+  gallery=gallery.filter(function(item){return !item.isDemo;});
   try{localStorage.setItem('imaginai_gallery',JSON.stringify(gallery));}catch(e){}
   renderGallery();
   var p=DEMO_PROMPTS[0];
@@ -372,7 +380,7 @@ function exitDemo(){
 }
 function runDemo(){
   if(running)return;
-  gallery=gallery.filter(function(i){return !i.isDemo;});
+  gallery=gallery.filter(function(item){return !item.isDemo;});
   try{localStorage.setItem('imaginai_gallery',JSON.stringify(gallery));}catch(e){}
   renderGallery();
   var p=DEMO_PROMPTS[Math.floor(Math.random()*DEMO_PROMPTS.length)];
@@ -437,7 +445,8 @@ function loadImageFile(file){
     document.getElementById('uploadPreview').src=uploadedDataUrl;
     document.getElementById('previewWrap').style.display='block';
     document.getElementById('uploadZone').style.display='none';
-    updGenLabel();toast('Image loaded - choose a mode below');
+    updGenLabel();
+    toast('Image ready! Choose style below then tap Apply Style');
   };
   reader.readAsDataURL(file);
 }
@@ -452,20 +461,20 @@ function clearUpload(){
 
 // History
 function saveHist(raw){
-  if(!raw||history.indexOf(raw)!==-1)return;
-  history.unshift(raw);if(history.length>20)history=history.slice(0,20);
-  try{localStorage.setItem('imaginai_hist',JSON.stringify(history));}catch(e){}
+  if(!raw||promptHistory.indexOf(raw)!==-1)return;
+  promptHistory.unshift(raw);if(promptHistory.length>20)promptHistory=promptHistory.slice(0,20);
+  try{localStorage.setItem('imaginai_hist',JSON.stringify(promptHistory));}catch(e){}
   renderHist();
 }
 function renderHist(){
   var el=document.getElementById('histList');
-  if(!history.length){el.innerHTML='<div class="no-hist">No history yet</div>';return;}
-  el.innerHTML=history.map(function(p,i){
+  if(!promptHistory.length){el.innerHTML='<div class="no-hist">No history yet</div>';return;}
+  el.innerHTML=promptHistory.map(function(p,i){
     return '<div class="hi" onclick="loadHist('+i+')"><div class="ht">'+xh(p)+'</div><button class="hd" onclick="event.stopPropagation();delHist('+i+')">X</button></div>';
   }).join('');
 }
-function loadHist(i){document.getElementById('promptInput').value=history[i];enhanced='';document.getElementById('enhBox').classList.remove('on');toast('Loaded from history');}
-function delHist(i){history.splice(i,1);try{localStorage.setItem('imaginai_hist',JSON.stringify(history));}catch(e){}renderHist();}
+function loadHist(i){document.getElementById('promptInput').value=promptHistory[i];enhanced='';document.getElementById('enhBox').classList.remove('on');toast('Loaded from history');}
+function delHist(i){promptHistory.splice(i,1);try{localStorage.setItem('imaginai_hist',JSON.stringify(promptHistory));}catch(e){}renderHist();}
 
 // Enhance
 function enhancePrompt(){
@@ -509,13 +518,15 @@ function updCacheBar(){
 function generate(){
   if(running)return;
   var raw=document.getElementById('promptInput').value.trim();
-  if(!raw){toast('Enter a prompt first');return;}
+  // Image upload mode: prompt is optional (used as hint), never block on it
   if(sourceMode==='img'&&uploadedDataUrl){
     if(imgMode==='analyze')doAnalyze(raw);
     else if(imgMode==='variant')doVariation(raw);
     else doStyleTransfer(raw);
     return;
   }
+  // Text mode: prompt required
+  if(!raw){toast('Enter a prompt first');return;}
   if(mode==='single')genSingle(raw);
   else if(mode==='batch')genBatch(raw);
   else genVar(raw);
